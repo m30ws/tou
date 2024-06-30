@@ -31,11 +31,12 @@ Other defines:
 #define _TOU_DEBUG_PREFIX "[:] "
 #endif
 #ifndef TOU_PRINTD
-#define TOU_PRINTD(format, ...) if (TOU_DBG) { printf(_TOU_DEBUG_PREFIX format, __VA_ARGS__); } else (void)0
+#define TOU_PRINTD(format, ...) if (TOU_DBG) { fprintf(stdout, _TOU_DEBUG_PREFIX format, ##__VA_ARGS__); } else (void)0
 #endif
 
 /* Func ptrs */
-typedef void* (*tou_funcptr)(void*);
+typedef void* (*tou_func)(void*);
+typedef void* (*tou_func2)(void*, void*);
 
 
 // ==============================================================
@@ -54,8 +55,8 @@ typedef void* (*tou_funcptr)(void*);
 		char destroy_dat2 : 1;
 	} tou_llist;
 
-	tou_llist* tou_llist_append(tou_llist** list, void* dat1, void* dat2, char dat1_is_dynalloc, char dat2_is_dynalloc);
-	tou_llist* tou_llist_find_exact(tou_llist* list, void* dat1, void* dat2);
+	tou_llist** tou_llist_append(tou_llist** list, void* dat1, void* dat2, char dat1_is_dynalloc, char dat2_is_dynalloc);
+	tou_llist** tou_llist_find_exact(tou_llist** list, void* dat1, void* dat2);
 #else
 	typedef struct tou_llist {
 		struct tou_llist* prev;
@@ -64,29 +65,48 @@ typedef void* (*tou_funcptr)(void*);
 		char destroy_dat1 : 1;
 	} tou_llist;
 
-	tou_llist* tou_llist_append(tou_llist** list, void* dat1, char dat1_is_dynalloc);
-	tou_llist* tou_llist_find_exact(tou_llist* list, void* dat1);
+	tou_llist** tou_llist_append(tou_llist** list, void* dat1, char dat1_is_dynalloc);
+	tou_llist** tou_llist_find_exact(tou_llist** list, void* dat1);
 #endif
+
+/* 
+	Used when not simply address of dat1/dat2 is required where you have tou_llist*, but rather when
+	you get list as double ptr and you want changes you make to the inner pointer reflect in
+	the original place instead of just locally. This construct is used multiple times when dealing
+	with .INI parser and I got tired of typing it and decided to extract it here.
+	Example: with simply ptr you would have
+		tou_llist* list = &section->dat2;
+	which if you wanted to reflect changes to the 'section' ptr you would have to have:
+		tou_llist** list = &((*sect)->dat2);
+	which is exactly what this macro does.
+*/
+#define TOU_LLIST_DAT_ADDR(list, param) ((tou_llist**)(&((*(list))->param)))
+
+/*
+
+*/
+#define tou_llist_new(...) (fprintf(stdout,_TOU_DEBUG_PREFIX"CREATING NEW :: NULL\n"), NULL)
+
+// typedef tou_llist* tou_llist_elem;
+// #define TOU_LLIST_UNPACK(elem) (*(elem))->dat1,(*(elem))->dat2
 
 void tou_llist_remove(tou_llist* elem);
 tou_llist* tou_llist_pop(tou_llist* elem);
 void tou_llist_free_element(tou_llist* elem);
 tou_llist* tou_llist_get_head(tou_llist* list);
 tou_llist* tou_llist_get_tail(tou_llist* list);
-void tou_llist_iter(tou_llist* list, tou_funcptr cb);
-tou_llist* tou_llist_find_key
+char tou_llist_is_head(tou_llist* elem);
+char tou_llist_is_tail(tou_llist* elem);
+void tou_llist_iter(tou_llist* list, tou_func cb);
+tou_llist** tou_llist_find_key
 (
-	tou_llist* list,
+	tou_llist** list,
 	void* dat1
-// #ifndef TOU_LLIST_SINGLE_ELEM
-// 	, void* dat2
-// #endif
+	// #ifndef TOU_LLIST_SINGLE_ELEM
+	// 	, void* dat2
+	// #endif
 );
-tou_llist* tou_llist_find_func
-(
-	tou_llist* list,
-	tou_funcptr cb
-);
+tou_llist** tou_llist_find_func(tou_llist** list, tou_func2 cb, void* userdata);
 
 void tou_llist_destroy(tou_llist* list);
 
@@ -106,7 +126,13 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len);
 
 size_t tou_strlcpy(char* dst, const char* src, size_t size);
 size_t tou_strlcat(char* dst, const char* src, size_t size);
+char* tou_strndup(const char* src, size_t size);
+
 tou_llist* tou_split(char* str, char* delim);
+
+tou_llist* tou_ini_parse_fp(FILE* fp);
+void tou_ini_destroy(tou_llist* inicontents);
+void tou_ini_print(tou_llist* inicontents);
 
 
 // ==============================================================
@@ -132,7 +158,6 @@ tou_llist* tou_split(char* str, char* delim);
 */
 char* tou_find_string_start(char* ptr, char* kwd)
 {
-	TOU_DEBUG( printf(_TOU_DEBUG_PREFIX"RECEIVED PTR :: %s\n", ptr) );
 	// dont worry its quite stupid
 	int kwd_len = strlen(kwd);
 	char* kwd_ptr = kwd;
@@ -167,18 +192,6 @@ char* tou_find_string_start(char* ptr, char* kwd)
 */
 char* tou_trim_string(char** str)
 {
-	/*char* ptr = (*str + strlen(*str) - 1);
-	while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r') {
-		*ptr = '\0';
-		ptr--;
-	}
-
-	ptr = *str;
-	while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r')
-		ptr++;
-
-	*str = ptr;*/
-
 	tou_trim_back(str);
 	return tou_trim_front(str);
 }
@@ -194,9 +207,8 @@ char* tou_trim_front(char** str)
 {
 	if (str == NULL || *str == NULL)
 		return NULL;
-
+	
 	char* ptr = *str;
-	// while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r')
 	while (TOU_IS_BLANK(*ptr))
 		ptr++;
 	*str = ptr;
@@ -216,7 +228,6 @@ void tou_trim_back(char** str)
 		return;
 
 	char* ptr = (*str + strlen(*str) - 1);
-	// while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r') {
 	while (TOU_IS_BLANK(*ptr)) {
 		*ptr = '\0';
 		ptr--;
@@ -234,18 +245,6 @@ void tou_trim_back(char** str)
 */
 void tou_trim_string_pure(char* str, char** start, char** end)
 {
-	/*char* ptr = (*str + strlen(*str) - 1);
-	while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r') {
-		*ptr = '\0';
-		ptr--;
-	}
-
-	ptr = *str;
-	while (*ptr == ' ' || *ptr == '\t' || *ptr == '\n' || *ptr == '\r')
-		ptr++;
-
-	*str = ptr;*/
-
 	char* back = tou_trim_back_pure(str);
 	char* front = tou_trim_front_pure(str);
 
@@ -365,11 +364,13 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len)
 	if (!filename || strlen(filename) == 0 || strcmp("stdin", filename) == 0) { // stdin
 		fp = stdin;
 	} else if ((fp = fopen(filename, "r")) == NULL) { // file
-		TOU_DEBUG( printf(_TOU_DEBUG_PREFIX "cannot open '%s'\n", filename) );
+		// TOU_DEBUG( printf(_TOU_DEBUG_PREFIX "cannot open '%s'\n", filename) );
+		TOU_PRINTD("[read_file_in_blocks] cannot open '%s'\n", filename);
 		return NULL;
 	}
 
-	TOU_DEBUG( printf(_TOU_DEBUG_PREFIX "reading from: %s\n", (fp==stdin) ? "STDIN" : filename) );
+	// TOU_DEBUG( printf(_TOU_DEBUG_PREFIX "reading from: %s\n", (fp==stdin) ? "STDIN" : filename) );
+	TOU_PRINTD("[read_file_in_blocks] reading from: %s\n", (fp==stdin) ? "STDIN" : filename);
 	char* read = tou_read_fp_in_blocks(fp, read_len, -1); // default block size
 
 	if (fp != stdin)
@@ -388,9 +389,9 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len)
 		@param[in] dat2 Data 2
 		@param[in] dat1_is_dynalloc Should data1 be free()'d when destroying list?
 		@param[in] dat2_is_dynalloc Should data2 be free()'d when destroying list?
-		@return tou_llist* Pointer to the newly created element
+		@return Pointer to the newly created element
 	*/
-	tou_llist* tou_llist_append(tou_llist** list, void* dat1, void* dat2, char dat1_is_dynalloc, char dat2_is_dynalloc)
+	tou_llist** tou_llist_append(tou_llist** list, void* dat1, void* dat2, char dat1_is_dynalloc, char dat2_is_dynalloc)
 	{
 		tou_llist** curr_head = (tou_llist**) list;
 		tou_llist* new_head = malloc(sizeof(*new_head));
@@ -406,7 +407,7 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len)
 		new_head->destroy_dat2 = dat2_is_dynalloc;
 
 		*curr_head = new_head;
-		return new_head;
+		return curr_head;
 	}
 #else
 	/*
@@ -416,9 +417,9 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len)
 		@param[in] list Address of first element (tou_llist**)
 		@param[in] dat1 Data 1
 		@param[in] dat1_is_dynalloc Should data1 be free()'d when destroying list?
-		@return tou_llist* Pointer to the newly created element
+		@return Pointer to the newly created element
 	*/
-	tou_llist* tou_llist_append(tou_llist** list, void* dat1, char dat1_is_dynalloc)
+	tou_llist** tou_llist_append(tou_llist** list, void* dat1, char dat1_is_dynalloc)
 	{
 		tou_llist** curr_head = (tou_llist**) list;
 		tou_llist* new_head = malloc(sizeof(*new_head));
@@ -432,7 +433,7 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len)
 		new_head->destroy_dat1 = dat1_is_dynalloc;
 
 		*curr_head = new_head;
-		return new_head;
+		return curr_head;
 	}
 #endif
 
@@ -533,6 +534,32 @@ tou_llist* tou_llist_get_tail(tou_llist* list)
 
 
 /*
+	Checks if element is head of the list
+	(->next should be NULL)
+
+	@param[in] elem Element to check
+	@return 1 or 0 depending on result
+*/
+char tou_llist_is_head(tou_llist* elem)
+{
+	return elem->next == NULL;
+}
+
+
+/*
+	Checks if element is tail of the list
+	(->prev should be NULL)
+
+	@param[in] elem Element to check
+	@return 1 or 0 depending on result
+*/
+char tou_llist_is_tail(tou_llist* elem)
+{
+	return elem->prev == NULL;
+}
+
+
+/*
 	Iterate through and call the specified function for each element
 	Automatically checks whether given element is head or tail and 
 	iterates accordingly.
@@ -542,7 +569,7 @@ tou_llist* tou_llist_get_tail(tou_llist* list)
 	@param[in] list Head or tail of the list
 	@param[in] cb Function to be called for each element
 */
-void tou_llist_iter(tou_llist* list, tou_funcptr cb)
+void tou_llist_iter(tou_llist* list, tou_func cb)
 {
 	if (!list || !cb)
 		return;
@@ -565,18 +592,18 @@ void tou_llist_iter(tou_llist* list, tou_funcptr cb)
 
 
 /*
+	[[WIP]] Manipulate elements from function during iteration ?
+	
 	Iterate through and call the specified function for each element
 	Automatically checks whether given element is head or tail and 
 	iterates accordingly.
 	If given function returns a value different from 0 the iteration
 	terminates early.
 
-	[[WIP]] Manipulate elements from function during iteration ?
-
 	@param[in] list ADDRESS of the Head or tail of the list
 	@param[in] cb Function to be called for each element
 */
-/* void tou_llist_iterex(tou_llist** list, tou_funcptr cb)
+/* void tou_llist_iterex(tou_llist** list, tou_func cb)
 {
 	if (!list || !cb)
 		return;
@@ -606,31 +633,41 @@ void tou_llist_iter(tou_llist* list, tou_funcptr cb)
 	@param[in] list Element to start the search from
 	@param[in] dat1 Comparison value
 	@param[in] dat2 Comparison value (if enabled)
-	@return tou_llist* Found element or NULL
+	@return Found element or NULL
 */
 #ifndef TOU_LLIST_SINGLE_ELEM
-	tou_llist* tou_llist_find_exact(tou_llist* list, void* dat1, void* dat2)
+	tou_llist** tou_llist_find_exact(tou_llist** list, void* dat1, void* dat2)
 	{
-		if (!list)
+		if (list == NULL || *list == NULL)
 			return NULL;
 
-		while (list) {
-			if (list->dat1 == dat1) return list;
-			if (list->dat2 == dat2) return list;
-			list = list->prev;
+		/* TOU_PRINTD("[find_exact] %p, %p, %p\n", list, dat1, dat2); */
+
+		tou_llist** tracker = list;
+		while (*tracker) {
+			/* TOU_PRINTD("[find_exact] %s (%p), %s (%p)\n",
+				(*tracker)->dat1, (*tracker)->dat1, (*tracker)->dat2, (*tracker)->dat2); */
+			if ((*tracker)->dat1 == dat1) return tracker;
+			if ((*tracker)->dat2 == dat2) return tracker;
+			tracker = &((*tracker)->prev);
 		}
 
 		return NULL;
 	}
 #else
-	tou_llist* tou_llist_find_exact(tou_llist* list, void* dat1)
+	tou_llist** tou_llist_find_exact(tou_llist** list, void* dat1)
 	{
-		if (!list)
+		if (list == NULL || *list == NULL)
 			return NULL;
 
-		while (list) {
-			if (list->dat1 == dat1) return list;
-			list = list->prev;
+		/* TOU_PRINTD("[find_exact] %p, %p\n", list, dat1); */
+
+		tou_llist** tracker = list;
+		while (*tracker) {
+			/* TOU_PRINTD("[find_exact] %s (%p)\n",
+				(*tracker)->dat1, (*tracker)->dat1); */
+			if ((*tracker)->dat1 == dat1) return tracker;
+			tracker = &((*tracker)->prev);
 		}
 
 		return NULL;
@@ -642,37 +679,48 @@ void tou_llist_iter(tou_llist* list, tou_funcptr cb)
 	Traverses the list starting from the passed element and tries
 	to find the first matching element with the following conditions:
 		- if dat1 is not null, tries to match it as a nul-terminated string
-		- if dat1 is null, tries to match dat2 exactly (if enabled)
+		//- if dat1 is null, tries to match dat2 exactly (if enabled)
 
 	@param[in] list Element to start the search from
 	@param[in] dat1 Comparison value
-	@param[in] dat2 Comparison value (if enabled)
-	@return tou_llist* Found element or NULL
+	// @param[in] dat2 Comparison value (if enabled)
+	@return Found element or NULL
 */
-tou_llist* tou_llist_find_key
+tou_llist** tou_llist_find_key
 (
-	tou_llist* list,
+	tou_llist** list,
 	void* dat1
-// #ifndef TOU_LLIST_SINGLE_ELEM
-// 	, void* dat2
-// #endif
+	// #ifndef TOU_LLIST_SINGLE_ELEM
+	// 	, void* dat2
+	// #endif
 ){
-	if (!list)
+	if (list == NULL || *list == NULL)
 		return NULL;
 
-	#ifndef TOU_LLIST_SINGLE_ELEM
-	#else
-		if (!dat1) return NULL;
-	#endif
+	// #ifndef TOU_LLIST_SINGLE_ELEM
+	// #else
+	// 	if (!dat1) return NULL;
+	// #endif
 
-	while (list) {
-		if (strcmp(list->dat1, dat1) == 0) return list;
-// #ifndef TOU_LLIST_SINGLE_ELEM
-// 		if (list->dat2 == dat2) return list;
-// #endif
-		list = list->prev;
+	// TOU_PRINTD(" IM GONNA PREENT \n");
+	// tou_ini_print(*list);- // don't use if list isnt inistruct obviously
+	//!!TOU_PRINTD("[llist_find_key] >> %s, %s\n", (*list)->dat1, (*list)->dat2);
+
+	tou_llist** tracker = list;
+	while (*tracker) {
+		//!!TOU_PRINTD("[llist_find_key] Tracker dat1: %s\n", (*tracker)->dat1);
+
+		if (strcmp((*tracker)->dat1, dat1) == 0) {
+			//!!TOU_PRINTD("[llist_find_key] FOUND %s (%p)\n", (*tracker)->dat1, (*tracker)->dat2);
+			return tracker;
+		}
+		// #ifndef TOU_LLIST_SINGLE_ELEM
+		// 		if (list->dat2 == dat2) return list;
+		// #endif
+		tracker = &((*tracker)->prev);
 	}
 
+	TOU_PRINTD("[llist_find_key] returning NULL\n");
 	return NULL;
 }
 
@@ -680,25 +728,24 @@ tou_llist* tou_llist_find_key
 /*
 	Traverses the list starting from the passed element and tries
 	to find the first matching element by checking the return value
-	of the given callback comparison function. If value equals 0
-	element is considered matched, otherwise the search continues.
+	of the given callback comparison function.
+	If function's return value equals 0 the element is considered matched
+	and the search terminates, otherwise search continues.
 
 	@param[in] list Element to start the search from
 	@param[in] cb Custom comparison function
-	@return tou_llist* Found element or NULL
+	@return Found element or NULL
 */
-tou_llist* tou_llist_find_func
-(
-	tou_llist* list,
-	tou_funcptr cb
-){
-	if (!list || !cb)
+tou_llist** tou_llist_find_func(tou_llist** list, tou_func2 cb, void* userdata)
+{
+	if (list == NULL || *list == NULL || cb == NULL)
 		return NULL;
 
-	while (list) {
-		if ((size_t) cb(list) == 0)
-			return list;
-		list = list->prev;
+	tou_llist** tracker = list;
+	while (*tracker) {
+		if ((size_t) cb(*tracker, userdata) == 0)
+			return tracker;
+		tracker = &((*tracker)->prev);
 	}
 
 	return NULL;
@@ -709,7 +756,7 @@ tou_llist* tou_llist_find_func
 	Traverses elements using data->prev and frees each one
 	including copied category string
 
-	@param[in] data Element of type tou_llist*; accepts either head or tail
+	@param[in] data Either head or tail element
 */
 void tou_llist_destroy(tou_llist* list)
 {
@@ -717,13 +764,11 @@ void tou_llist_destroy(tou_llist* list)
 		return;
 
 	// We have at least one element
-
 	if (list->prev != NULL) {
-
 		tou_llist *prev, *curr = list; // copy so we can later destroy it separately
+
 		while (curr != NULL) {
 			prev = curr->prev;
-
 			if (curr->destroy_dat1) free(curr->dat1);
 #ifndef TOU_LLIST_SINGLE_ELEM
 			if (curr->destroy_dat2) free(curr->dat2);
@@ -733,11 +778,10 @@ void tou_llist_destroy(tou_llist* list)
 		}
 
 	} else if (list->next != NULL) {
-
 		tou_llist *next, *curr = list;
+		
 		while (curr != NULL) {
 			next = curr->next;
-
 			if (curr->destroy_dat1) free(curr->dat1);
 #ifndef TOU_LLIST_SINGLE_ELEM
 			if (curr->destroy_dat2) free(curr->dat2);
@@ -761,6 +805,27 @@ void tou_llist_destroy(tou_llist* list)
 	*/
 }
 
+
+/*
+ * strlcpy() and strcat() functions were acquired from
+ * Todd Miller under the following license:
+ *
+ * Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * 
+ * Also see: https://www.millert.dev/papers/strlcpy
+ */
 
 /* Copies string SRC to DST.  If SRC is longer than SIZE - 1
 	characters, only SIZE - 1 characters are copied.  A null
@@ -817,8 +882,28 @@ size_t tou_strlcat(char* dst, const char* src, size_t size)
 
 
 /*
+	Returns a newly allocated copy of a string, capped at 'size' length,
+	or NULL if unable to allocate. Appends NUL at the end.
+
+	@param[in] src String to copy from
+	@param[in] size Max copied bytes from string
+	@return Pointer to a newly allocated string
 */
-//strndup(pos_start, pos_delim-pos_start)
+char* tou_strndup(const char* src, size_t size)
+{
+	size_t src_len = strlen(src);
+	char* copy = NULL;
+
+	if (size > 0) {
+		size_t copy_len = size;
+		if (src_len < copy_len)
+			copy_len = src_len;
+		if ((copy = malloc(copy_len + 1)) == NULL)
+			return NULL;
+		tou_strlcpy(copy, src, copy_len + 1);
+	}
+	return copy;
+}
 
 
 /*
@@ -841,9 +926,8 @@ tou_llist* tou_split(char* str, char* delim)
 	char* pos_delim = tou_find_string_start(str, delim);
 	
 	while (pos_delim) {
-		// bruh i dont got my strndup..
-		//tou_llist_append(&list, strndup(pos_start, pos_delim-pos_start), NULL, 1, 0);
 
+		// TODO: swap with tou_strndup() ?
 		char* buf = malloc(pos_delim-pos_start + 1);
 		// strncpy(buf, pos_start, pos_delim-pos_start);
 		tou_strlcpy(buf, pos_start, pos_delim-pos_start + 1);
@@ -855,22 +939,11 @@ tou_llist* tou_split(char* str, char* delim)
 		pos_delim = tou_find_string_start(pos_start/*pos_delim + delim_len*/, delim);
 	}
 
-	// TOU_PRINTD("pos_start: |%p|\n", pos_start);
-	// TOU_PRINTD("pos_delim: |%p|\n", pos_delim);
-	// TOU_PRINTD("str: |%p|\n", str);
-	// TOU_PRINTD("str+strlen: |%p|\n", str+strlen(str));
-	// TOU_PRINTD("str+strlen-2 == 0: %d |%c|\n", (*(str+strlen(str)-2) == 0), *(str+strlen(str)-2) );
-	// TOU_PRINTD("str+strlen-1 == 0: %d |%c|\n", (*(str+strlen(str)-1) == 0), *(str+strlen(str)-1) );
-	// TOU_PRINTD("str+strlen == 0: %d |%c|\n", (*(str+strlen(str)) == 0), *(str+strlen(str)) );
-	// TOU_PRINTD("str+strlen+1 == 0: %d |%c|\n", (*(str+strlen(str)+1) == 0), *(str+strlen(str)+1) );
-	// TOU_PRINTD("str+strlen+2 == 0: %d |%c|\n", (*(str+strlen(str)+2) == 0), *(str+strlen(str)+2) );
-	// TOU_PRINTD("(str+strlen)-pos_start: |%d|\n", (str+strlen(str))-pos_start);
-	// TOU_PRINTD("\n",0);
-
 	size_t len = strlen(pos_start);
 	TOU_PRINTD("FINAL LEN :: %d\n", len);
 	if (len > 0) {
 		// Append last part till the end
+		// TODO: swap with tou_strndup() ?
 		char* buf = malloc(len + 1);
 		tou_strlcpy(buf, pos_start, len + 1);
 		TOU_PRINTD("BUF: %s\n", buf);
@@ -882,10 +955,10 @@ tou_llist* tou_split(char* str, char* delim)
 
 
 /*
-	Parses given fp as .INI file and constructs structured data.
+	Parses given FILE* as .INI file and constructs structured data.
 
-	Parser supports using both semicolon (;) and hashtag (#) for comments,
-	however they must be on a separate line by themselves.
+	Parser supports using semicolon (;), hashtag (#) and percent (%) for
+	comments, however they must be on a separate line by themselves.
 	Specifying the same section name more than once is not supported (that
 	may change in the future where the definitions would merge and "flatten"
 	into one combined section).
@@ -895,82 +968,343 @@ tou_llist* tou_split(char* str, char* delim)
 	Whitespaces may be added between sections, properties and section name
 	brackets for better readability.
 
+	Structured data is constructed as two layers of llists where the primary list
+	that gets returned from function represents sections in .INI file where the
+	section names and properties are stored in .dat1 and .dat2 fields respectively.
+	Properties in .dat2 are stored as sub-llist where keys and values are allocated
+	and are stored as strings in .dat1 and .dat2 fields respectively.
+
 	@param[in] fp File pointer to where to read the .INI data from
 	@return Pointer to the allocated structured data
 */
-void* tou_ini_parse_fp(FILE* fp)
+tou_llist* tou_ini_parse_fp(FILE* fp)
 {
-	/* size_t bufsize = 256+1;
-	char* linebuf = malloc(bufsize);
-	while (getline(&linebuf, &bufsize, fp) > -1) {
-	free(linebuf);
-	*/
-
-	tou_llist* inistruct = NULL;
-
-	char linebuf[256+1];
-	char* line = linebuf;
-	while (fgets(line, 256+1, fp)) {
-		printf("Line read: (%d) |%s|\n", strlen(line), line);
-
-		tou_trim_front(&line);
-
-		/*int len = strlen(line);
-		if (len < 1) // Empty line
-			continue;*/
-		if (! *line)
-			continue;
-
-		if (*line == ';' || *line == '#') {
-			// Comment line
-			continue;
-		}
-
-		if (*line == '[') {
-			// Section indication
-			tou_trim_back(&line);
-			line++;
-			line[strlen(line) - 1] = '\0';
-
-			//tou_llist_append(&inistruct, );
-		}
-		// else check property otherwise invalid
-
-		tou_trim_back(&line);
-
-		// int seplen;
-		// char* sep;
-		// sep = tou_find_string_start(line, " = ");
-		// seplen = 3;
-		// if (!sep) {
-		// 	sep = tou_find_string_start(line, "=");
-		// 	seplen = 1;
-		// 	if (!sep) {
-		// 		// invalid line
-		// 		printf("invalid (%s)\n", line);
-		// 		return 0;
-		// 	}
-		// }
-		// *sep = '\0';
-		// strcpy(key, bufptr);
-		// strcpy(val, sep+seplen);
+	if (!fp) {
+		TOU_PRINTD("ini_parse_fp received empty fp\n");
+		return NULL;
 	}
 
+	tou_llist* inistruct = NULL; //= tou_llist_new();
+	char line_buf[256+1];
+	char* line = line_buf;
+	int line_len;
+	size_t line_no = 0;
+
+	while (fgets(line, 256+1, fp)) {
+		line_no++; // inc line tracker right away
+
+		tou_trim_front(&line);
+		if (*line == '\0')
+			continue;
+
+		// Comment line
+		if (*line == ';' || *line == '#' || *line == '%')
+			continue;
+
+		// Section indication
+		if (*line == '[') {
+
+			tou_trim_back(&line);
+			line_len = strlen(line);
+			
+			// Cut off front bracket
+			line++;
+			line_len--;
+
+			// If other bracket doesn't exist ignore it and still parse as valid syntax
+			if (line[line_len - 1] == ']') {
+				line[line_len - 1] = '\0';
+				line_len--;
+			}
+
+			// Append section
+			tou_llist_append(&inistruct,
+				strdup(line), NULL,
+				1, 0);
+
+			TOU_PRINTD("Appended section: %s\n", inistruct->dat1);
+			continue;
+		}
+
+		// Alright then, check if line matches a property line type; otherwise its an invalid line
+		int prop_len;
+		char* prop;
+		
+		// Test if either delimiter exists in line
+		prop = tou_find_string_start(line, " = ");
+		prop_len = 3;
+
+		if (prop == NULL) {
+			prop = tou_find_string_start(line, "=");
+			prop_len = 1;
+
+			// Invalid line
+			if (prop == NULL) {
+				int len = strlen(line);
+				if (line[len - 1] == '\n')
+					line[len - 1] = '\0';
+				TOU_PRINTD("Invalid line encountered while parsing (line %zu): %s\n", line_no, line);
+				tou_ini_destroy(inistruct);
+				return NULL;
+			}
+		}
+
+		// Property encountered before any section declaration
+		if (inistruct == NULL) {
+			TOU_PRINTD("Property specified before any section (line %zu): %s\n", line_no, line);
+			tou_ini_destroy(inistruct);
+			return NULL;
+		}
+
+		// Duplicate key and value and append to list
+		*prop = '\0';
+		char* key = line;
+		char* val = prop + prop_len;
+		tou_trim_back(&val);
+
+		TOU_PRINTD("  Key: %s, Val: %s\n", key, val);
+		tou_llist_append((tou_llist**)(&inistruct->dat2),	// append to "current section" element
+			strdup(key), strdup(val), 						// copy key, copy val
+			1, 1); 											// auto dealloc both key&val
+	}
+
+	return inistruct;
+}
+
+
+/*
+	Parses given buffer as .INI file and returns structured data.
+
+	@param[in] contents Buffer containing raw .INI data
+	@return Pointer to the allocated structured data
+*/
+// void* tou_ini_parse(char* contents)
+// {
+// 	// raise notimplemented :*
+// 	return NULL;
+// }
+
+
+/*
+	Destroys contents of .INI structure including deallocation
+	of inner structures; assumes head was passed.
+
+	@param[in] inicontents Parsed INI structure
+*/
+void tou_ini_destroy(tou_llist* inicontents)
+{
+	tou_llist* section = inicontents;
+	while (section) {
+		tou_llist_destroy(section->dat2); // Destroy each props sublist
+		TOU_PRINTD("Destroying section: %s\n", section->dat1);
+		section = section->prev;
+	}
+	tou_llist_destroy(inicontents); // Destroy whole structure
+	TOU_PRINTD("Destroyed INI structure.\n");
+}
+
+
+/*
+	Prints the contents of the parsed .INI structure to
+	the console in a structured graphical format.
+
+	@param[in] inicontents Parsed INI structure
+*/
+void tou_ini_print(tou_llist* inicontents)
+{
+	if (inicontents == NULL) {
+		TOU_PRINTD("ini_print received empty struct\n");
+		return;
+	}
+
+	tou_llist* section = inicontents;
+	tou_llist* props;
+	fprintf(stdout, "<.INI structure>\n");
+	fprintf(stdout, " |\n");
+
+	while (section) {
+		props = section->dat2;
+		char next_section_ch = (section->prev == NULL) ? ' ' : '|';
+		fprintf(stdout, " +-> [Section] \"%s\"\n", section->dat1);
+		while (props) {
+			fprintf(stdout, " %c     |\n", next_section_ch);
+			fprintf(stdout, " %c     +-> [Prop] \"%s\": \"%s\"\n",
+				next_section_ch, props->dat1, props->dat2);
+			props = props->prev;
+		}
+		printf(" %c\n", next_section_ch);
+		section = section->prev;
+	}
+}
+
+
+/*
+	Returns pointer to the section element matching given 'section_name'.
+
+	@param[in] inicontents Pointer to the parsed .INI structure
+	@param[in] section_name 
+	@return Pointer to the section (tou_llist**), or NULL
+*/
+tou_llist** tou_ini_get_section(tou_llist** inicontents, const char* section_name)
+{
+	if (inicontents == NULL || *inicontents == NULL || section_name == NULL) {
+		TOU_PRINTD("ini_get_section received empty params\n");
+		return NULL;
+	}
+
+	tou_llist** sect = tou_llist_find_key(inicontents, (void*)section_name);
+	if (sect == NULL) {
+		TOU_PRINTD("ini_get_section unable to find given section\n");
+		return NULL;
+	}
+
+	return sect;
+}
+
+
+/*
+	Returns pointer to the property element matching given 'section_name' and 'key'.
+
+	@param[in] inicontents Pointer to the parsed .INI structure
+	@param[in] section_name 
+	@param[in] key 
+	@return Pointer to the property (tou_llist**), or NULL
+*/
+tou_llist** tou_ini_get_property(tou_llist** inicontents, const char* section_name, const char* key)
+{
+	if (inicontents == NULL || *inicontents == NULL || section_name == NULL || key == NULL) {
+		TOU_PRINTD("ini_get_property received empty params\n");
+		return NULL;
+	}
+
+	tou_llist** sect = tou_llist_find_key(inicontents, (void*) section_name);
+	if (sect == NULL) {
+		TOU_PRINTD("ini_get_property unable to find given section\n");
+		return NULL;
+	}
+	// TOU_PRINTD("TOU_INI_GET_PROPERTY found SECTION %s\n", (*sect)->dat1);
+
+	tou_llist** prop = tou_llist_find_key( (tou_llist**)(&((*sect)->dat2)), (void*)key );
+	if (prop == NULL) {
+		TOU_PRINTD("ini_get_property unable to find given key\n");
+	}
+
+	return prop;
+}
+
+
+/*
+	Returns the contents of 'key' under the given 'section_name'.
+
+	@param[in] inicontents Pointer to the parsed .INI structure
+	@param[in] section_name 
+	@param[in] key 
+	@return Pointer to the contents, or NULL
+*/
+char* tou_ini_get(tou_llist** inicontents, const char* section_name, const char* key)
+{
+	tou_llist** prop = tou_ini_get_property(inicontents, section_name, key);
+	TOU_PRINTD("ini_get  prop: %p\n", prop);
+
+	if (prop)
+		return (*prop)->dat2;
 	return NULL;
 }
 
 
 /*
-	Parses given buffer as .INI file and returns structured data
+	Sets the contents of 'key' under the given 'section_name'
+	to the specified value, reallocating memory if necessary.
 
-	@param[in] contents Buffer containing raw .INI data
-	@return Pointer to the allocated structured data
+	@param[in] inicontents Pointer to the parsed .INI structure
+	@param[in] section_name 
+	@param[in] key 
+	@param[in] new_value 
+	@return Pointer to the new value that was stored in struct, or NULL
 */
-void* tou_ini_parse(char* contents)
+char* tou_ini_set(tou_llist** inicontents, const char* section_name, const char* key, char* new_value)
 {
-	// Raise notimplemented
-	return NULL;
+	if (inicontents == NULL || *inicontents == NULL || section_name == NULL || key == NULL || new_value == NULL) {
+		TOU_PRINTD("[ini_set] received empty params\n");
+		return NULL;
+	}
+
+	tou_llist** sect = tou_llist_find_key(inicontents, (void*) section_name);
+	if (sect == NULL) {
+		TOU_PRINTD("[ini_set] section not found, allocating new...\n");
+		// TODO: tou_ini_new_section ?
+		sect = tou_llist_append(inicontents, strdup(section_name), NULL, 1, 0);
+	}
+	
+	tou_llist** prop = tou_llist_find_key( (tou_llist**)(&((*sect)->dat2)), (void*) key );
+
+	if (prop == NULL) {
+		// Allocate new property...
+		TOU_PRINTD("[ini_set] property not found\n");
+		prop = tou_llist_append( (tou_llist**)(&((*sect)->dat2)),
+			strdup(key), strdup(new_value),
+			1, 1);
+		TOU_PRINTD("[ini_set] %s, %s\n", (*prop)->dat1, (*prop)->dat2);
+		return (*prop)->dat2;
+
+	} else {
+		// ...or set/realloc the existing one
+		TOU_PRINTD("[ini_set] property found\n");
+		char* old_value = (*prop)->dat2;
+		size_t old_len = strlen(old_value);
+		size_t new_len = strlen(new_value);
+		
+		if (new_len > old_len)
+			old_value = realloc(old_value, new_len + 1);
+
+		tou_strlcpy(old_value, new_value, new_len + 1);
+		(*prop)->dat2 = old_value;
+
+		return (*prop)->dat2;
+	}
 }
+
+
+/*
+
+*/
+int tou_ini_save_fp(tou_llist* inicontents, FILE* fp)
+{
+	if (inicontents == NULL || fp == NULL) {
+		TOU_PRINTD("ini_save_fp received empty params\n");
+		return -1;
+	}
+	
+	tou_llist* section = inicontents;
+	while (section) {
+		if (section->dat1 == NULL) {
+			TOU_PRINTD("Invalid section name encountered\n");
+			return -2;
+		}
+		// Print section name
+		fprintf(fp, "\n[%s]", section->dat1);
+		
+		tou_llist* prop = section->dat2;
+		while (prop) {
+			if (prop->dat1 == NULL || prop->dat2 == NULL) {
+				TOU_PRINTD("Invalid property data encountered\n");
+				return -3;
+			}
+			fprintf(fp, "\n  %s = %s", prop->dat1, prop->dat2);
+			prop = prop->prev;
+		}
+
+		fprintf(fp, "\n");
+		section = section->prev;
+	}
+
+	return 0;
+}
+
+
+/* Loading icon
+printf("⣿ ⣾⣽⣻⢿⡿⣟⣯⣷\n");
+printf("⠿ ⠾⠽⠻⠟⠯⠷\n"); */
 
 
 #endif // TOU_IMPLEMENTATION_DONE

@@ -4,7 +4,7 @@
 
 #define TOU_IMPLEMENTATION
 #define TOU_DBG 1
-// #define TOU_LLIST_SINGLE_ELEM
+/* #define TOU_LLIST_SINGLE_ELEM */
 #include "tou.h"
 
 /* void* cb(void* ptr, void* _userdata)
@@ -13,7 +13,7 @@
 	return (void*)(size_t) strcmp(elem->dat1, "test07");
 } */
 
-/* void* cb_ini(void* ptr, void* userdata)
+void* cb_ini(void* ptr, void* userdata)
 {
 	tou_llist* elem = (tou_llist*) ptr;
 	printf("CB_INI got: %s, %s\n", elem->dat1, elem->dat2);
@@ -25,7 +25,7 @@ void* cb_ini2(void* ptr, void* userdata)
 	tou_llist* elem = (tou_llist*) ptr;
 	printf("CB_INI2 got: %s, %s\n", elem->dat1, elem->dat2);
 	return (void*)(size_t) strcmp(elem->dat1, userdata);
-} */
+}
 
 /* void* cbtok(void* ptr)
 {
@@ -98,7 +98,7 @@ int main(int argc, char const* argv[])
 	printf("\nFind test:\n");
 
 	// Find using callback function
-	elem = tou_llist_find_func(&head, cb,0);
+	elem = tou_llist_find_func(&head, cb,NULL);
 	#ifdef TOU_LLIST_SINGLE_ELEM
 		printf("Found: %s\n", (char*) (*elem)->dat1);
 	#else
@@ -109,7 +109,7 @@ int main(int argc, char const* argv[])
 	tou_llist* poppedelem = tou_llist_pop(*elem);
 
 	// Get tail
-	firstelem = tou_llist_get_tail(head);//*elem);
+	firstelem = tou_llist_get_tail(head);
 	while (firstelem) {
 
 		#ifdef TOU_LLIST_SINGLE_ELEM
@@ -155,7 +155,7 @@ int main(int argc, char const* argv[])
 
 	// Find using dat1 as string
 //	#pragma GCC diagnostic ignored "-Wint-conversion"
-	elem = tou_llist_find_exact(&head, (void*)-1, (void*)2);
+	elem = tou_llist_find_exact(&head, (void*) -1, (void*) 2);
 //	#pragma GCC diagnostic warning "-Wint-conversion"
 
 	#ifdef TOU_LLIST_SINGLE_ELEM
@@ -181,15 +181,6 @@ int main(int argc, char const* argv[])
 	tou_llist_destroy(head);
 
 	printf("\n");
-*/
-
-	// Server test (WIP) //
-/*
-	tou_server* serv = tou_spinup_server(servcb);
-	while (1) {
-		;
-	}
-	tou_destroy_server(serv);
 */
 
 	// Trim test //
@@ -257,12 +248,15 @@ int main(int argc, char const* argv[])
 */
 
 	// .INI test //
-/*
+
 	// char* inicontents = tou_read_file_in_blocks("testini.ini", NULL);
 	// printf("File contents:\n|%s|\n", inicontents);
 	// void* parsed = tou_ini_parse(inicontents);
 
 	// free(inicontents);
+
+//printf("BEFORE disabled stdout ...\n");
+//int oldstdout = tou_disable_stdout();
 
 	FILE* fp = fopen("testini.ini", "r");
 	tou_llist* inicontents = tou_ini_parse_fp(fp);
@@ -323,10 +317,56 @@ int main(int argc, char const* argv[])
 			printf(" $ Found: %s, %s\n", (*ret2)->dat1, (*ret2)->dat2);
 		}
 	}
+	printf("\n");
+
+	FILE* fpout = fopen("testini.out.ini", "w");
+	// tou_llist* inicontents = tou_ini_parse_fp(fpout);
+	int retval = tou_ini_save_fp(inicontents, fpout);
+	fclose(fpout);
+	printf("Ini save return val: %d\n\n", retval);
 
 	// Obliterate 
 	tou_ini_destroy(inicontents);
+
+//tou_enable_stdout(oldstdout);
+//printf("AFTER enabled stdout again...\n");
+
+
+
+	// Server test (WIP) //
+/*
+	tou_server* serv = tou_spinup_server(servcb);
+	while (1) {
+		;
+	}
+	tou_destroy_server(serv);
 */
+
+/*
+	extern tou_llist* testfunc();
+
+	tou_llist* tst = testfunc();
+	tou_llist_append(&tst, tou_strdup("str1"), 0, 1,0);//11 ,1,0);
+	tou_llist_append(&tst, tou_strdup("str2"), 0, 1,0);//22 ,1,0);
+
+	size_t len;
+	// void** res = tou_llist_gather_dat1(tst, &len);
+	// ... or ...
+	char** res = (char**)tou_llist_gather_dat1(tst, &len);
+	printf("Printing gathered data .dat1:\n");
+	for (size_t i = 0; i < len; i++)
+		printf("  gathered[%d] = %s\n", i, res[i]);
+
+	void** res2 = tou_llist_gather_dat2(tst, &len);
+	printf("Printing gathered data .dat2:\n");
+	for (size_t i = 0; i < len; i++)
+		printf("  gathered[%d] = %d\n", i, res2[i]);
+
+	free(res);
+	free(res2);
+	tou_llist_destroy(tst);
+*/
+
 
 	printf("\nDone.\n");
 	return 0;

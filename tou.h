@@ -7,7 +7,7 @@ Other defines:
 	#define TOU_LLIST_SINGLE_ELEM
 
 Things:
-	- linked list impl
+	- full linked list impl
 	- reading file in "blocks" (improve this)
 	- string splitter, trimmer etc. different operations
 	- .INI file parser / exporter
@@ -34,7 +34,7 @@ Things:
 #define TOU_DEFAULT_BLOCKSIZE 4096
 
 #ifndef TOU_DBG
-#define TOU_DBG 0 // set default value
+#define TOU_DBG 0 
 #endif
 #ifndef TOU_DEBUG
 #define TOU_DEBUG(x) if (TOU_DBG) { x; } else (void)0
@@ -64,8 +64,26 @@ typedef void* (*tou_func2)(void*, void*);
 // ||                        FUNC DECLS                        ||
 // ==============================================================
 
+/* == String functions == */
+size_t tou_strlcpy(char* dst, const char* src, size_t size);
+size_t tou_strlcat(char* dst, const char* src, size_t size);
+char* tou_strdup(const char* src);
+char* tou_strndup(const char* src, size_t size);
 
-/* Linked list */
+char* tou_trim_string(char** str);
+char* tou_trim_front(char** str);
+void tou_trim_back(char** str);
+
+void tou_trim_string_pure(char* str, char** start, char** end);
+char* tou_trim_front_pure(char* str);
+char* tou_trim_back_pure(char* str);
+
+/* == File operations == */
+char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize);
+char* tou_read_file_in_blocks(const char* filename, size_t* read_len);
+
+
+/* == Linked list == */
 #ifndef TOU_LLIST_SINGLE_ELEM
 	typedef struct tou_llist {
 		struct tou_llist* prev;
@@ -114,7 +132,8 @@ typedef void* (*tou_func2)(void*, void*);
 	tou_llist** tou_llist_appendone(tou_llist** list, void* dat1, char dat1_is_dynalloc);
 #else
 	tou_llist** tou_llist_append(tou_llist** list, void* dat1, char dat1_is_dynalloc);
-	#define tou_llist_appendone tou_llist_append // Auto-convert SINGLE_ELEM style in case it was used
+	// Auto-convert SINGLE_ELEM style in case it was used
+	#define tou_llist_appendone tou_llist_append
 #endif
 void tou_llist_destroy(tou_llist* list);
 void tou_llist_remove(tou_llist* elem);
@@ -130,7 +149,8 @@ void tou_llist_iter(tou_llist* list, tou_func cb);
 	tou_llist** tou_llist_find_exactone(tou_llist** list, void* dat1);
 #else
 	tou_llist** tou_llist_find_exact(tou_llist** list, void* dat1);
-	#define tou_llist_find_exactone tou_llist_find_exact // Auto-convert SINGLE_ELEM style in case it was used
+	// Auto-convert SINGLE_ELEM style in case it was used
+	#define tou_llist_find_exactone tou_llist_find_exact
 #endif
 tou_llist** tou_llist_find_key(tou_llist** list, void* dat1);
 tou_llist** tou_llist_find_func(tou_llist** list, tou_func2 cb, void* userdata);
@@ -139,27 +159,11 @@ size_t tou_llist_len(tou_llist* list);
 void** tou_llist_gather_dat1(tou_llist* list, size_t*);
 void** tou_llist_gather_dat2(tou_llist* list, size_t*);
 
-
+/* == Strings higher level == */
 char* tou_find_string_start(char* ptr, char* kwd);
-
-char* tou_trim_string(char** str);
-char* tou_trim_front(char** str);
-void tou_trim_back(char** str);
-
-void tou_trim_string_pure(char* str, char** start, char** end);
-char* tou_trim_front_pure(char* str);
-char* tou_trim_back_pure(char* str);
-
-char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize);
-char* tou_read_file_in_blocks(const char* filename, size_t* read_len);
-
-size_t tou_strlcpy(char* dst, const char* src, size_t size);
-size_t tou_strlcat(char* dst, const char* src, size_t size);
-char* tou_strdup(const char* src);
-char* tou_strndup(const char* src, size_t size);
-
 tou_llist* tou_split(char* str, char* delim);
 
+/* == INI parser == */
 tou_llist* tou_ini_parse_fp(FILE* fp);
 void tou_ini_destroy(tou_llist* inicontents);
 void tou_ini_print(tou_llist* inicontents);
@@ -169,6 +173,10 @@ char* tou_ini_get(tou_llist** inicontents, const char* section_name, const char*
 char* tou_ini_set(tou_llist** inicontents, const char* section_name, const char* key, char* new_value);
 int tou_ini_save_fp(tou_llist* inicontents, FILE* fp);
 
+#define TOU_JSON_DATA_VER "1.0"
+int tou_ini_save_fp_json(tou_llist* inicontents, FILE* fp);
+
+/* == System/IO control == */
 int tou_disable_stdout();
 void tou_enable_stdout(int saved_fd);
 
@@ -186,43 +194,126 @@ void tou_enable_stdout(int saved_fd);
 #define TOU_IMPLEMENTATION_DONE
 
 /*
-	Find start function
-	has two pointers corresponding to current pos in source string
-	and current pos in keyword string that was matched up current char
+ * strlcpy() and strcat() functions were acquired from
+ * Todd Miller under the following license:
+ *
+ * Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * 
+ * Also see: https://www.millert.dev/papers/strlcpy
+ */
+
+/* Copies string SRC to DST.  If SRC is longer than SIZE - 1
+	characters, only SIZE - 1 characters are copied.  A null
+	terminator is always written to DST, unless SIZE is 0.
+	Returns the length of SRC, not including the null terminator.
 	
-	@param[in] ptr Source string
-	@param[in] kwd Which keyword to search for
-	@return Pointer to the beginning of the keyword in the text or NULL
-*/
-char* tou_find_string_start(char* ptr, char* kwd)
+	strlcpy() is not in the standard C library, but it is an
+	increasingly popular extension.  See
+	http://www.courtesan.com/todd/papers/strlcpy.html for
+	information on strlcpy(). */
+size_t tou_strlcpy(char* dst, const char* src, size_t size)
 {
-	// dont worry its quite stupid
-	int kwd_len = strlen(kwd);
-	char* kwd_ptr = kwd;
-	char* ret_ptr = NULL;
-	
-	while (*ptr) {
-		if (*kwd_ptr == '\0') {
-			// only time it should be is when kwd is found
-			ret_ptr = ptr - kwd_len;
-			break;
-		}
+	size_t src_len;
 
-		if (*kwd_ptr == *ptr) {
-			kwd_ptr++;
-		} else {
-			kwd_ptr = kwd;
-		}
-
-		ptr++;
+	src_len = strlen (src);
+	if (size > 0)
+	{
+		size_t dst_len = size - 1;
+		if (src_len < dst_len)
+			dst_len = src_len;
+		memcpy (dst, src, dst_len);
+		dst[dst_len] = '\0';
 	}
+	return src_len;
+}
 
-	return ret_ptr;
+
+/* Concatenates string SRC to DST.  The concatenated string is
+   limited to SIZE - 1 characters.  A null terminator is always
+   written to DST, unless SIZE is 0.  Returns the length that the
+   concatenated string would have assuming that there was
+   sufficient space, not including a null terminator.
+
+   strlcat() is not in the standard C library, but it is an
+   increasingly popular extension.  See
+   http://www.courtesan.com/todd/papers/strlcpy.html for
+   information on strlcpy(). */
+size_t tou_strlcat(char* dst, const char* src, size_t size)
+{
+	size_t src_len, dst_len;
+
+	src_len = strlen (src);
+	dst_len = strlen (dst);
+	if (size > 0 && dst_len < size) 
+	{
+		size_t copy_cnt = size - dst_len - 1;
+		if (src_len < copy_cnt)
+			copy_cnt = src_len;
+		memcpy (dst + dst_len, src, copy_cnt);
+		dst[dst_len + copy_cnt] = '\0';
+	}
+	return src_len + dst_len;
 }
 
 
 /*
-	Trims whitespaces from front and back of the string
+	Strdup implementation to not depend on compilers.
+
+	@param[in] src String to be duplicated
+	@return Pointer to the newly allocated copy of the string
+*/
+char* tou_strdup(const char* src)
+{
+	size_t src_len = strlen(src);
+	char* copy;
+	if ((copy = malloc(src_len + 1)) == NULL)
+		return NULL;
+	// tou_strlcpy(copy, src, src_len + 1);
+	memcpy(copy, src, src_len + 1);
+	return copy;
+}
+
+
+/*
+	Returns a newly allocated copy of a string, capped at 'size' length,
+	or NULL if unable to allocate. Appends NUL at the end.
+
+	@param[in] src String to copy from
+	@param[in] size Max copied bytes from string
+	@return Pointer to a newly allocated string
+*/
+char* tou_strndup(const char* src, size_t size)
+{
+	size_t src_len = strlen(src);
+	char* copy = NULL;
+
+	if (size > 0) {
+		size_t copy_len = size;
+		if (src_len < copy_len)
+			copy_len = src_len;
+		if ((copy = malloc(copy_len + 1)) == NULL)
+			return NULL;
+		// tou_strlcpy(copy, src, copy_len + 1);
+		memcpy(copy, src, src_len + 1);
+	}
+	return copy;
+}
+
+
+/*
+	Trims whitespaces from front and back of the string.
 	!! This is a destructive operation since trim_back is destructive. !!
 
 	@param[in] str Pointer to the string to be trimmed
@@ -236,7 +327,7 @@ char* tou_trim_string(char** str)
 
 
 /*
-	Trims whitespaces only from the front of the string
+	Trims whitespaces only from the front of the string.
 
 	@param[in] str Pointer to the string to be trimmed
 	@return Pointer to the new start in string
@@ -255,7 +346,7 @@ char* tou_trim_front(char** str)
 
 
 /*
-	Trims whitespaces only from the back of the string
+	Trims whitespaces only from the back of the string.
 	!! This is a destructive operation !!
 
 	@param[in] str Pointer to the string to be trimmed
@@ -274,8 +365,8 @@ void tou_trim_back(char** str)
 
 
 /*
-	Returns pointers to the first and last character that
-	are not whitespaces
+	Returns pointers to the first and last
+	character that are not whitespaces.
 
 	@param[in] str Pointer to the string to be trimmed
 	@param[out] start Pointer to the start of contents
@@ -293,7 +384,7 @@ void tou_trim_string_pure(char* str, char** start, char** end)
 
 /*
 	Returns pointer to the first character from
-	the front that isn't a whitespace
+	the front that isn't a whitespace.
 
 	@param[in] str Pointer to the string to be trimmed
 	@return Pointer to first non-whitespace char
@@ -331,9 +422,90 @@ char* tou_trim_back_pure(char* str)
 
 
 /*
-	Reads file in blocks
-	Automatically allocates memory and
-	optionally returns amount read (may be set to null)
+	Finds start of substring(keyword) in the given char*.
+
+	@param[in] ptr Source string
+	@param[in] kwd Which keyword to search for
+	@return Pointer to the beginning of the keyword in the text or NULL
+*/
+char* tou_find_string_start(char* ptr, char* kwd)
+{
+	int kwd_len = strlen(kwd);
+	char* kwd_ptr = kwd;
+	char* ret_ptr = NULL;
+	
+	while (*ptr) {
+		if (*kwd_ptr == '\0') {
+			// only time it should be is when kwd is found
+			ret_ptr = ptr - kwd_len;
+			break;
+		}
+
+		if (*kwd_ptr == *ptr) {
+			kwd_ptr++;
+		} else {
+			kwd_ptr = kwd;
+		}
+
+		ptr++;
+	}
+
+	return ret_ptr;
+}
+
+
+/*
+	Splits string using a delimiter that may be longer than one character.
+
+	@param[in] str String to be split
+	@param[in] delim Delimiter string
+	@return Linked list containing tokens
+*/
+tou_llist* tou_split(char* str, char* delim)
+{
+	if (!str || !delim)
+		return NULL;
+
+	TOU_PRINTD("[tou_split] STR_LEN :: %d\n", strlen(str));
+
+	size_t delim_len = strlen(delim);
+	tou_llist* list = NULL;
+	char* pos_start = str;
+	char* pos_delim = tou_find_string_start(str, delim);
+	
+	while (pos_delim) {
+
+		// TODO: swap with tou_str[n]dup() ?
+		char* buf = malloc(pos_delim-pos_start + 1);
+		// strncpy(buf, pos_start, pos_delim-pos_start);
+		tou_strlcpy(buf, pos_start, pos_delim-pos_start + 1);
+		TOU_PRINTD("[tou_split] BUF: %s\n", buf);
+		tou_llist_append(&list, buf, NULL, 1, 0);
+
+		// Find next occurence
+		pos_start = pos_delim + delim_len;
+		pos_delim = tou_find_string_start(pos_start/*pos_delim + delim_len*/, delim);
+	}
+
+	size_t len = strlen(pos_start);
+	TOU_PRINTD("[tou_split] FINAL LEN :: %d\n", len);
+	if (len > 0) {
+		// Append last part till the end
+		// TODO: swap with tou_strndup() ?
+		char* buf = malloc(len + 1);
+		tou_strlcpy(buf, pos_start, len + 1);
+		TOU_PRINTD("[tou_split] BUF: %s\n", buf);
+		tou_llist_append(&list, buf, NULL, 1, 0);
+	}
+
+	return tou_llist_get_tail(list);
+}
+
+
+/*
+	Reads file in blocks.
+	Automatically allocates memory and optionally
+	returns amount read (may be set to null).
 
 	@param[in] filename Either file name or ""/"stdin" to read from stdin
 	@param[out] read_len Optional pointer to where to store file size
@@ -388,9 +560,9 @@ char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize)
 
 
 /*
-	Reads file in blocks
-	Automatically allocates memory and
-	optionally returns amount read (may be set to null)
+	Reads file in blocks.
+	Automatically allocates memory and optionally
+	returns amount read (may be set to null).
 
 	@param[in] filename Either file name or ""/"stdin" to read from stdin
 	@param[out] read_len Optional pointer to where to store file size
@@ -522,49 +694,6 @@ void tou_llist_destroy(tou_llist* list)
 			curr = next;
 		}
 	}
-
-// 	// We have at least one element
-// 	if (list->prev != NULL) {
-// 		tou_llist *prev, *curr = list;
-
-// 		while (curr != NULL) {
-// 			prev = curr->prev;
-// 			if (curr->destroy_dat1) free(curr->dat1);
-// #ifndef TOU_LLIST_SINGLE_ELEM
-// 			if (curr->destroy_dat2) free(curr->dat2);
-// #endif
-// 			curr->prev = NULL;
-// 			free(curr);
-// 			curr = prev;
-// 		}
-
-// 	} else if (list->next != NULL) {
-// 		tou_llist *next, *curr = list;
-		
-// 		while (curr != NULL) {
-// 			next = curr->next;
-// 			if (curr->destroy_dat1) free(curr->dat1);
-// #ifndef TOU_LLIST_SINGLE_ELEM
-// 			if (curr->destroy_dat2) free(curr->dat2);
-// #endif
-// 			curr->next = NULL;
-// 			free(curr);
-// 			curr = next;
-// 		}
-// 	}
-
-	// then this is not needed since its also destroyed in loop?
-	// guess i may have been delulu all this time?
-	/*
-	// destroy passed element separately
-	if (list == NULL)
-		return;
-	if (list->destroy_dat1) free(list->dat1);
-#ifndef TOU_LLIST_SINGLE_ELEM
-	if (list->destroy_dat2) free(list->dat2);
-#endif
-	free(list);
-	*/
 }
 
 
@@ -723,21 +852,6 @@ void tou_llist_iter(tou_llist* list, tou_func cb)
 			list = list->next;
 		}
 	}
-
-	// if (list->prev == NULL) { // iter-from-head
-	// 	while (list) {
-	// 		if (cb(list) != 0)
-	// 			break;
-	// 		list = list->next;
-	// 	}
-	
-	// } else if (list->next == NULL) { // iter-from-tail
-	// 	while (list) {
-	// 		if (cb(list) != 0)
-	// 			break;
-	// 		list = list->prev;
-	// 	}
-	// }
 }
 
 
@@ -855,26 +969,12 @@ tou_llist** tou_llist_find_key(tou_llist** list, void* dat1)
 	if (list == NULL || *list == NULL)
 		return NULL;
 
-	// #ifndef TOU_LLIST_SINGLE_ELEM
-	// #else
-	// 	if (!dat1) return NULL;
-	// #endif
-
-	// TOU_PRINTD(" IM GONNA PREENT \n");
-	// tou_ini_print(*list);- // don't use if list isnt inistruct obviously
-	//!!TOU_PRINTD("[llist_find_key] >> %s, %s\n", (*list)->dat1, (*list)->dat2);
-
 	tou_llist** tracker = list;
 	while (*tracker) {
-		//!!TOU_PRINTD("[llist_find_key] Tracker dat1: %s\n", (*tracker)->dat1);
-
 		if (strcmp((*tracker)->dat1, dat1) == 0) {
 			//!!TOU_PRINTD("[llist_find_key] FOUND %s (%p)\n", (*tracker)->dat1, (*tracker)->dat2);
 			return tracker;
 		}
-		// #ifndef TOU_LLIST_SINGLE_ELEM
-		// 		if (list->dat2 == dat2) return list;
-		// #endif
 		tracker = &((*tracker)->prev);
 	}
 
@@ -928,26 +1028,13 @@ size_t tou_llist_len(tou_llist* list)
 			len++;
 			list = list->prev;
 		}
-	
+
 	} else { // this is tail (or inbetween)
 		while (list) {
 			len++;
 			list = list->next;
 		}
 	}
-
-	// if (list->prev == NULL) { // iter-from-head
-	// 	while (list) {
-	// 		len ++;
-	// 		list = list->next;
-	// 	}
-
-	// } else if (list->next == NULL) { // iter-from-tail
-	// 	while (list) {
-	// 		len ++;
-	// 		list = list->prev;
-	// 	}
-	// }
 
 	return len;
 }
@@ -1032,173 +1119,6 @@ void** tou_llist_gather_dat2(tou_llist* list, size_t* len)
 	if (len != NULL)
 		*len = _len;
 	return gathered;
-}
-
-
-/*
- * strlcpy() and strcat() functions were acquired from
- * Todd Miller under the following license:
- *
- * Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- * 
- * Also see: https://www.millert.dev/papers/strlcpy
- */
-
-/* Copies string SRC to DST.  If SRC is longer than SIZE - 1
-	characters, only SIZE - 1 characters are copied.  A null
-	terminator is always written to DST, unless SIZE is 0.
-	Returns the length of SRC, not including the null terminator.
-	
-	strlcpy() is not in the standard C library, but it is an
-	increasingly popular extension.  See
-	http://www.courtesan.com/todd/papers/strlcpy.html for
-	information on strlcpy(). */
-size_t tou_strlcpy(char* dst, const char* src, size_t size)
-{
-	size_t src_len;
-
-	src_len = strlen (src);
-	if (size > 0)
-	{
-		size_t dst_len = size - 1;
-		if (src_len < dst_len)
-			dst_len = src_len;
-		memcpy (dst, src, dst_len);
-		dst[dst_len] = '\0';
-	}
-	return src_len;
-}
-
-
-/* Concatenates string SRC to DST.  The concatenated string is
-   limited to SIZE - 1 characters.  A null terminator is always
-   written to DST, unless SIZE is 0.  Returns the length that the
-   concatenated string would have assuming that there was
-   sufficient space, not including a null terminator.
-
-   strlcat() is not in the standard C library, but it is an
-   increasingly popular extension.  See
-   http://www.courtesan.com/todd/papers/strlcpy.html for
-   information on strlcpy(). */
-size_t tou_strlcat(char* dst, const char* src, size_t size)
-{
-	size_t src_len, dst_len;
-
-	src_len = strlen (src);
-	dst_len = strlen (dst);
-	if (size > 0 && dst_len < size) 
-	{
-		size_t copy_cnt = size - dst_len - 1;
-		if (src_len < copy_cnt)
-			copy_cnt = src_len;
-		memcpy (dst + dst_len, src, copy_cnt);
-		dst[dst_len + copy_cnt] = '\0';
-	}
-	return src_len + dst_len;
-}
-
-
-/*
-	Strdup implementation to not depend on compilers
-
-	@param[in] src String to be duplicated
-	@return Pointer to the newly allocated copy of the string
-*/
-char* tou_strdup(const char* src)
-{
-	size_t src_len = strlen(src);
-	char* copy;
-	if ((copy = malloc(src_len + 1)) == NULL)
-		return NULL;
-	// tou_strlcpy(copy, src, src_len + 1);
-	memcpy(copy, src, src_len + 1);
-	return copy;
-}
-
-
-/*
-	Returns a newly allocated copy of a string, capped at 'size' length,
-	or NULL if unable to allocate. Appends NUL at the end.
-
-	@param[in] src String to copy from
-	@param[in] size Max copied bytes from string
-	@return Pointer to a newly allocated string
-*/
-char* tou_strndup(const char* src, size_t size)
-{
-	size_t src_len = strlen(src);
-	char* copy = NULL;
-
-	if (size > 0) {
-		size_t copy_len = size;
-		if (src_len < copy_len)
-			copy_len = src_len;
-		if ((copy = malloc(copy_len + 1)) == NULL)
-			return NULL;
-		// tou_strlcpy(copy, src, copy_len + 1);
-		memcpy(copy, src, src_len + 1);
-	}
-	return copy;
-}
-
-
-/*
-	Splits string using a delimiter that may be more than one character
-
-	@param[in] str String to be split
-	@param[in] delim Delimiter string
-	@return Linked list containing tokens
-*/
-tou_llist* tou_split(char* str, char* delim)
-{
-	if (!str || !delim)
-		return NULL;
-
-	TOU_PRINTD("STR_LEN :: %d\n", strlen(str));
-
-	size_t delim_len = strlen(delim);
-	tou_llist* list = NULL;
-	char* pos_start = str;
-	char* pos_delim = tou_find_string_start(str, delim);
-	
-	while (pos_delim) {
-
-		// TODO: swap with tou_strndup() ?
-		char* buf = malloc(pos_delim-pos_start + 1);
-		// strncpy(buf, pos_start, pos_delim-pos_start);
-		tou_strlcpy(buf, pos_start, pos_delim-pos_start + 1);
-		TOU_PRINTD("BUF: %s\n", buf);
-		tou_llist_append(&list, buf, NULL, 1, 0);
-
-		// Find next occurence
-		pos_start = pos_delim + delim_len;
-		pos_delim = tou_find_string_start(pos_start/*pos_delim + delim_len*/, delim);
-	}
-
-	size_t len = strlen(pos_start);
-	TOU_PRINTD("FINAL LEN :: %d\n", len);
-	if (len > 0) {
-		// Append last part till the end
-		// TODO: swap with tou_strndup() ?
-		char* buf = malloc(len + 1);
-		tou_strlcpy(buf, pos_start, len + 1);
-		TOU_PRINTD("BUF: %s\n", buf);
-		tou_llist_append(&list, buf, NULL, 1, 0);
-	}
-
-	return tou_llist_get_tail(list);
 }
 
 
@@ -1311,9 +1231,9 @@ tou_llist* tou_ini_parse_fp(FILE* fp)
 		tou_trim_back(&val);
 
 		TOU_PRINTD("  Key: %s, Val: %s\n", key, val);
-		tou_llist_append((tou_llist**)(&inistruct->dat2),	// append to "current section" element
-			tou_strdup(key), tou_strdup(val), 						// copy key, copy val
-			1, 1); 											// auto dealloc both key&val
+		tou_llist_append((tou_llist**)(&inistruct->dat2),    // append to "current section" element
+			tou_strdup(key), tou_strdup(val),                // copy key, copy val
+			1, 1);                                           // auto dealloc both key&val
 	}
 
 	return inistruct;
@@ -1353,8 +1273,8 @@ void tou_ini_destroy(tou_llist* inicontents)
 
 
 /*
-	Prints the contents of the parsed .INI structure to
-	the console in a structured graphical format.
+	Prints the contents of the parsed .INI structure
+	to stdout in a structured graphical format.
 
 	@param[in] inicontents Parsed INI structure
 */
@@ -1529,27 +1449,27 @@ char* tou_ini_set(tou_llist** inicontents, const char* section_name, const char*
 int tou_ini_save_fp(tou_llist* inicontents, FILE* fp)
 {
 	if (inicontents == NULL || fp == NULL) {
-		TOU_PRINTD("ini_save_fp received empty params\n");
+		TOU_PRINTD("[ini_save_fp] received empty params\n");
 		return -1;
 	}
 	
 	tou_llist* section = inicontents;
 	while (section) {
 		if (section->dat1 == NULL) {
-			TOU_PRINTD("Invalid section name encountered\n");
+			TOU_PRINTD("[ini_save_fp] Invalid section name encountered\n");
 			return -3;
 		}
 		// Print section name
-		fprintf(fp, "\n[%s]", section->dat1);
+		fprintf(fp, "[%s]", section->dat1);
 		if (ferror(fp)) {
-			TOU_PRINTD("Error writing to stream\n");
+			TOU_PRINTD("[ini_save_fp] Error writing to stream\n");
 			return -2;
 		}
 		
 		tou_llist* prop = section->dat2;
 		while (prop) {
 			if (prop->dat1 == NULL || prop->dat2 == NULL) {
-				TOU_PRINTD("Invalid property data encountered\n");
+				TOU_PRINTD("[ini_save_fp] Invalid property data encountered\n");
 				return -4;
 			}
 			fprintf(fp, "\n%s = %s", prop->dat1, prop->dat2);
@@ -1559,6 +1479,69 @@ int tou_ini_save_fp(tou_llist* inicontents, FILE* fp)
 		fprintf(fp, "\n");
 		section = section->prev;
 	}
+
+	return 0;
+}
+
+
+/*
+	Exports .INI structure data as JSON to the file stream.
+	Return error codes:
+	 0 = OK, no error,
+	-1 = NULL received in params,
+	-2 = Cannot write to stream,
+	-3 = Invalid section name encountered in struct,
+	-4 = Invalid property data encountered in struct
+
+	@param[in] inicontents Pointer to the starting element
+	@param[in] fp File* stream to write to
+	@return Zero if successful, error code if failed
+*/
+int tou_ini_save_fp_json(tou_llist* inicontents, FILE* fp)
+{
+	if (inicontents == NULL || fp == NULL) {
+		TOU_PRINTD("[ini_save_fp_json] received empty params\n");
+		return -1;
+	}
+	
+	// Print initial json struct and metadata
+	fprintf(fp, "{\n\t\"ver\": " TOU_MSTR(TOU_JSON_DATA_VER) ",\n\t\"sections\": {");
+	if (ferror(fp)) {
+		TOU_PRINTD("[ini_save_fp_json] Error writing to stream\n");
+		return -2;
+	}
+
+	tou_llist* section = inicontents;
+	// size_t nsections = 0;
+	while (section) {
+		if (section->dat1 == NULL) {
+			TOU_PRINTD("[ini_save_fp_json] Invalid section name encountered\n");
+			return -3;
+		}
+		// Print section name
+		fprintf(fp, "\n\t\t\"%s\": {", section->dat1);
+		
+		tou_llist* prop = section->dat2;
+		// size_t nprops = 0;
+		while (prop) {
+			if (prop->dat1 == NULL || prop->dat2 == NULL) {
+				TOU_PRINTD("[ini_save_fp_json] Invalid property data encountered\n");
+				return -4;
+			}
+
+			// Print property
+			fprintf(fp, "%s\n\t\t\t\"%s\": \"%s\"", (prop==section->dat2 ? "":","), prop->dat1, prop->dat2);
+			// nprops++;
+			prop = prop->prev;
+		}
+
+		fprintf(fp, "\n\t\t}%s", (section->prev==NULL ? "":","));
+		// nsections++;
+		section = section->prev;
+	}
+
+	// fprintf(fp, "\n\t},\n\t\"section_count\": %zu\n}\n", nsections);
+	fprintf(fp, "\n\t}\n}");
 
 	return 0;
 }

@@ -248,7 +248,7 @@ int main(int argc, char const* argv[])
 */
 
 	// .INI test //
-
+/*
 	// char* inicontents = tou_read_file_in_blocks("testini.ini", NULL);
 	// printf("File contents:\n|%s|\n", inicontents);
 	// void* parsed = tou_ini_parse(inicontents);
@@ -320,8 +320,9 @@ int main(int argc, char const* argv[])
 	printf("\n");
 
 	FILE* fpout = fopen("testini.out.ini", "w");
-	// tou_llist* inicontents = tou_ini_parse_fp(fpout);
 	int retval = tou_ini_save_fp(inicontents, fpout);
+	// FILE* fpout = fopen("testini.out.json", "w");
+	// int retval = tou_ini_save_fp_json(inicontents, fpout);
 	fclose(fpout);
 	printf("Ini save return val: %d\n\n", retval);
 
@@ -331,7 +332,7 @@ int main(int argc, char const* argv[])
 //tou_enable_stdout(oldstdout);
 //printf("AFTER enabled stdout again...\n");
 
-
+*/
 
 	// Server test (WIP) //
 /*

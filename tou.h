@@ -10,7 +10,7 @@ Things:
 	- full linked list impl
 	- reading file in "blocks" (improve this)
 	- string splitter, trimmer etc. different operations
-	- .INI file parser / exporter
+	- .INI file parser / exporter(+JSON)
 	- xml (todo)
 	- safer string functions
 	- disabling And restoring stdout
@@ -26,12 +26,6 @@ Things:
 #include <stdlib.h>
 #include <string.h>
 
-#define TOU_STR(s) #s
-#define TOU_MSTR(s) TOU_STR(s)
-
-#define TOU_IS_BLANK(c) ((c)==' ' || (c)=='\n' || (c)=='\r' || (c)=='\t')
-
-#define TOU_DEFAULT_BLOCKSIZE 4096
 
 #ifndef TOU_DBG
 #define TOU_DBG 0 
@@ -54,6 +48,27 @@ Things:
 #include <fcntl.h> // O_WRONLY
 #define _TOU_DEVNULL_FILE "/dev/null"
 #endif
+
+/* Various definitions */
+#ifndef TOU_DEFAULT_BLOCKSIZE
+#define TOU_DEFAULT_BLOCKSIZE 4096
+#endif
+
+#ifndef TOU_STR
+#define TOU_STR(s) #s
+#endif
+#ifndef TOU_MSTR
+#define TOU_MSTR(s) TOU_STR(s)
+#endif
+
+#ifndef TOU_IS_BLANK
+#define TOU_IS_BLANK(c) ((c)==' ' || (c)=='\n' || (c)=='\r' || (c)=='\t')
+#endif
+
+#ifndef TOU_RANDINT
+#define TOU_RANDINT(mx, mn) ((int)(((float)rand()/RAND_MAX) * ((mx)-(mn)) + (mn)))
+#endif
+
 
 /* Func ptrs */
 typedef void* (*tou_func)(void*);
@@ -82,6 +97,9 @@ char* tou_trim_back_pure(char* str);
 char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize);
 char* tou_read_file_in_blocks(const char* filename, size_t* read_len);
 
+/* == System/IO control == */
+int tou_disable_stdout();
+void tou_enable_stdout(int saved_fd);
 
 /* == Linked list == */
 #ifndef TOU_LLIST_SINGLE_ELEM
@@ -113,7 +131,9 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len);
 		tou_llist** list = &((*sect)->dat2);
 	which is exactly what this macro does.
 */
+#ifndef TOU_LLIST_DAT_ADDR
 #define TOU_LLIST_DAT_ADDR(list, param) ((tou_llist**)(&((*(list))->param)))
+#endif
 
 /*
 	Define creation of a new llist through #define so even though it
@@ -154,7 +174,6 @@ void tou_llist_iter(tou_llist* list, tou_func cb);
 #endif
 tou_llist** tou_llist_find_key(tou_llist** list, void* dat1);
 tou_llist** tou_llist_find_func(tou_llist** list, tou_func2 cb, void* userdata);
-
 size_t tou_llist_len(tou_llist* list);
 void** tou_llist_gather_dat1(tou_llist* list, size_t*);
 void** tou_llist_gather_dat2(tou_llist* list, size_t*);
@@ -175,10 +194,6 @@ int tou_ini_save_fp(tou_llist* inicontents, FILE* fp);
 
 #define TOU_JSON_DATA_VER "1.0"
 int tou_ini_save_fp_json(tou_llist* inicontents, FILE* fp);
-
-/* == System/IO control == */
-int tou_disable_stdout();
-void tou_enable_stdout(int saved_fd);
 
 
 // ==============================================================
@@ -586,6 +601,60 @@ char* tou_read_file_in_blocks(const char* filename, size_t* read_len)
 	if (fp != stdin)
 		fclose(fp);
 	return read;
+}
+
+
+/*
+	Re-enables STDOUT that had been disabled using
+	the saved file descriptor from previous function.
+
+	@param[in] saved_fd Saved STDOUT fd
+*/
+void tou_enable_stdout(int saved_fd)
+{
+	fflush(stdout);
+
+#ifdef _WIN32
+	// #pragma message "bindobs"
+	_dup2(saved_fd, 1);
+	_flushall();
+
+#elif __linux__
+	// #pragma message "bibux"
+	dup2(saved_fd, 1);
+	close(saved_fd);
+#endif
+}
+
+
+/*
+	Redirects STDOUT to /dev/null or NUL: files.
+	Return value should be saved if you wish to
+	restore STDOUT function.
+
+	@return New file descriptor for the saved STDOUT
+*/
+int tou_disable_stdout()
+{
+	fflush(stdout);
+	int stdout_fd;
+
+#ifdef _WIN32
+	// #pragma message "bindobs"
+	stdout_fd = _dup(1);
+	FILE* fp_nul = fopen(_TOU_DEVNULL_FILE, "w");
+	_dup2(_fileno(fp_nul), 1);
+	fclose(fp_nul);
+
+#elif __linux__
+	// #pragma message "bibux"
+	stdout_fd = dup(1);
+	int new = open(_TOU_DEVNULL_FILE, O_WRONLY);
+	dup2(new, 1);
+	close(new);
+#endif
+	
+	return stdout_fd;
 }
 
 
@@ -1544,60 +1613,6 @@ int tou_ini_save_fp_json(tou_llist* inicontents, FILE* fp)
 	fprintf(fp, "\n\t}\n}");
 
 	return 0;
-}
-
-
-/*
-	Redirects STDOUT to /dev/null or NUL: files.
-	Return value should be saved if you wish to
-	restore STDOUT function.
-
-	@return New file descriptor for the saved STDOUT
-*/
-int tou_disable_stdout()
-{
-	fflush(stdout);
-	int stdout_fd;
-
-#ifdef _WIN32
-	// #pragma message "bindobs"
-	stdout_fd = _dup(1);
-	FILE* fp_nul = fopen(_TOU_DEVNULL_FILE, "w");
-	_dup2(_fileno(fp_nul), 1);
-	fclose(fp_nul);
-
-#elif __linux__
-	// #pragma message "bibux"
-	stdout_fd = dup(1);
-	int new = open(_TOU_DEVNULL_FILE, O_WRONLY);
-	dup2(new, 1);
-	close(new);
-#endif
-	
-	return stdout_fd;
-}
-
-
-/*
-	Re-enables STDOUT that had been disabled using
-	the saved file descriptor from previous function.
-
-	@param[in] saved_fd Saved STDOUT fd
-*/
-void tou_enable_stdout(int saved_fd)
-{
-	fflush(stdout);
-
-#ifdef _WIN32
-	// #pragma message "bindobs"
-	_dup2(saved_fd, 1);
-	_flushall();
-
-#elif __linux__
-	// #pragma message "bibux"
-	dup2(saved_fd, 1);
-	close(saved_fd);
-#endif
 }
 
 

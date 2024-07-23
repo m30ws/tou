@@ -13,7 +13,7 @@
 	return (void*)(size_t) strcmp(elem->dat1, "test07");
 } */
 
-void* cb_ini(void* ptr, void* userdata)
+/* void* cb_ini(void* ptr, void* userdata)
 {
 	tou_llist* elem = (tou_llist*) ptr;
 	printf("CB_INI got: %s, %s\n", elem->dat1, elem->dat2);
@@ -25,7 +25,7 @@ void* cb_ini2(void* ptr, void* userdata)
 	tou_llist* elem = (tou_llist*) ptr;
 	printf("CB_INI2 got: %s, %s\n", elem->dat1, elem->dat2);
 	return (void*)(size_t) strcmp(elem->dat1, userdata);
-}
+} */
 
 /* void* cbtok(void* ptr)
 {
@@ -344,9 +344,9 @@ int main(int argc, char const* argv[])
 */
 
 /*
-	extern tou_llist* testfunc();
+	//extern tou_llist* testfunc();
 
-	tou_llist* tst = testfunc();
+	tou_llist* tst = NULL;//testfunc();
 	tou_llist_append(&tst, tou_strdup("str1"), 0, 1,0);//11 ,1,0);
 	tou_llist_append(&tst, tou_strdup("str2"), 0, 1,0);//22 ,1,0);
 

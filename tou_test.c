@@ -30,16 +30,29 @@ void* cb_ini2(void* ptr, void* userdata)
 /* void* cbtok(void* ptr)
 {
 	printf("Token <%s>\n", ((tou_llist*)ptr)->dat1);
-	return 0;
+	return (void*) 1;
 } */
+
+/* void* cbblock3(void* data, void* len, void* userdata)
+{
+	printf("Block\n=====\n%s\n===== (%zu)\n", (char*)data, (size_t)len);
+	return (void*) TOU_CONTINUE;
+} */
+
 
 int main(int argc, char const* argv[])
 {
 	// File read test //
-/*	
-	char* contents = tou_read_file_in_blocks("testfile.txt", NULL);
-	printf("%s", contents);
-	free(contents);
+/*
+	char* contents = tou_read_file("testfile.txt", NULL);
+	printf("tou_read_file contents:\n%s", contents);
+	free(contents); contents = NULL;
+
+	FILE* fptr = fopen("testfile.txt", "r");
+	contents = tou_read_fp_in_blocks(fptr, 0,0,cbblock3,0);
+	fclose(fptr);
+	printf("\ntou_read_fp_in_blocks contents:\n%s", contents);
+	free(contents); contents = NULL;
 */
 
 	// Function pointer test //
@@ -249,7 +262,7 @@ int main(int argc, char const* argv[])
 
 	// .INI test //
 /*
-	// char* inicontents = tou_read_file_in_blocks("testini.ini", NULL);
+	// char* inicontents = tou_read_file_in_blocks("testini.ini", NULL, NULL, NULL);
 	// printf("File contents:\n|%s|\n", inicontents);
 	// void* parsed = tou_ini_parse(inicontents);
 
@@ -366,6 +379,77 @@ int main(int argc, char const* argv[])
 	free(res);
 	free(res2);
 	tou_llist_destroy(tst);
+*/
+
+
+/*
+	typedef struct {
+		char name[31+1];
+		char surname[31+1];
+		int age;
+		void* extra_data;
+	} payload_example;
+	printf("sss %d\n", sizeof(payload_example));
+
+	typedef struct {
+		int id;
+		char free;
+		// "3" more bytes free here inbetween
+		size_t size;
+	} memfrag;
+
+	#define tou_sll_new(varname, n, sizeofone) \
+		char _##varname##__ [(n)*(sizeof(tou_sll)+(sizeofone))] = {0}; \
+		tou_sll* varname = (tou_sll*) _##varname##__;
+
+	// tou_sll_new(tst, 10, sizeof(memfrag));
+	// -> is actually:  tou_sll varname[(n)*((sizeofone)+sizeof(tou_sll))] = {0};
+	// -> or:           tou_sll tst[10 * (sizeof(memfrag) + sizeof(tou_sll))] = {0};
+
+	printf("sizeof(tou_sll) = %d, sizeof(memfrag) = %d\n\n", sizeof(tou_sll), sizeof(memfrag));
+
+	#define LEN_SLL 10
+	//char tst[LEN_SLL * (sizeof(tou_sll) + sizeof(memfrag))] = {0};
+	tou_sll_new(tst, 10, sizeof(memfrag));
+	const size_t SIZE_SLL_ELEM = sizeof(tou_sll) + sizeof(memfrag);
+
+	#define SLL_FROM_MEM(mem, idx) ((tou_sll*)((char*)(mem) + (idx)*SIZE_SLL_ELEM + 0))
+	#define FRG_FROM_MEM(mem, idx) ((memfrag*)((char*)(mem) + (idx)*SIZE_SLL_ELEM + sizeof(tou_sll)))
+	#define FRG_FROM_SLL(sll)      ((memfrag*)(((char*)(sll)) + sizeof(tou_sll)))
+
+	for (size_t i = 0; i < LEN_SLL; i++) {
+		tou_sll* sll_elem = SLL_FROM_MEM(tst, i); //(tou_sll*)(tst + i*SIZE_SLL_ELEM + 0);
+		memfrag* mfr_elem = FRG_FROM_MEM(tst, i); //(memfrag*)(tst + i*SIZE_SLL_ELEM + sizeof(tou_sll));
+
+		printf("tou_sll* sll_elem = %p\nmemfrag* mfr_elem = %p\n", sll_elem, mfr_elem);
+
+		if (i > 0) {
+			sll_elem->prev = SLL_FROM_MEM(tst, i-1);
+		} else {
+			sll_elem->prev = NULL;
+		}
+
+		if (i < LEN_SLL-1) {
+			sll_elem->next = SLL_FROM_MEM(tst, i+1);
+		} else {
+			sll_elem->next = NULL;
+		}
+
+		mfr_elem->id = i;
+		mfr_elem->free = 1;
+		mfr_elem->size = 0;
+	}
+
+	printf("\nAlright, time to try reading data as list.\n");
+	tou_sll* sll_elem = SLL_FROM_MEM(tst, 0);
+	memfrag* mfr_elem = FRG_FROM_SLL(sll_elem);//FRG_FROM_MEM(tst, 0);
+
+	while (sll_elem) {
+		printf("SLL elem: (%p) id=%d  [%p]\n", sll_elem, FRG_FROM_SLL(sll_elem)->id, sll_elem->prev);
+		sll_elem = sll_elem->next;
+	}
+	
+	//printf("1) %p, 2) %p\n", tst->prev, tst->next);//, tst->)
 */
 
 

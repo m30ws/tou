@@ -1,0 +1,23 @@
+/** @mainpage Tou header library
+
+	@include{doc,raise=1} README.md
+
+	## Things:
+	- full linked list impl
+	- reading file in "blocks" (improve this)
+	- string splitter, trimmer etc. different operations
+	- .INI file parser / exporter(+JSON)
+	- xml (todo)
+	- safer string functions
+	- disabling And restoring stdout
+	- statically allocated linked list (todo)
+
+	- A ton of helper definitions
+
+	## Defines:
+	Required always but only once! :
+	- `#define TOU_IMPLEMENTATION`
+
+	Other various defines:
+	- `#define TOU_LLIST_SINGLE_ELEM`
+ */

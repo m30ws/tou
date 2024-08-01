@@ -5,20 +5,21 @@
 	
 	Required always but only once! :
 	- #define TOU_IMPLEMENTATION
-
+	
 	Other various defines:
 	- #define TOU_LLIST_SINGLE_ELEM
-
+	
 	Things:
 	- full linked list impl
-	- reading file in "blocks" (improve this)
+	- reading file in blocks (filename or FILE*)
 	- string splitter, trimmer etc. different operations
 	- .INI file parser / exporter(+JSON)
 	- xml (todo)
 	- safer string functions
 	- disabling And restoring stdout
 	- statically allocated linked list (todo)
-
+	- asset embedding (todo)
+	
 	- A ton of helper definitions
 */
 
@@ -92,6 +93,7 @@
 	@brief Helps convert 's' into C literal
 
 	Ex. MSTR(0xFFBA) -> "0xFFBA"
+	    MSTR(abcdef) -> "abcdef"
 */
 #ifndef TOU_MSTR
 #define TOU_MSTR(s) TOU_STR(s)
@@ -325,21 +327,19 @@ char* tou_trim_back_pure(char* str);
 /**
 	@brief Reads file in blocks, calling user-provided function for each block.
 
-	Automatically allocates memory and optionally returns amount read (may be set to null).
+	Automatically allocates memory and returns amount read.
 	Function receives 3 parameters:
-		- data [in] Pointer to the beginning of new data
+		- data [in] Pointer to new data
 		- len [in] Amount of bytes actually read
-		- userdata [in] User data provided
-	Data pointer is actually offset in the total buffer where whole file is stored.
+		- userdata [in,out] User data provided
 
 	@param[in] fp FILE* from which data is to be read
-	@param[out] read_len Optional pointer to where to store file size
 	@param[in] blocksize Size in bytes; set to 0 to use default (TOU_DEFAULT_BLOCKSIZE)
 	@param[in] cb Function to call for each block
 	@param[in] userdata Custom data to be passed to function
-	@return Pointer to loaded file or NULL if error
+	@return Total bytes read
 */
-char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize, tou_func3 cb, void* userdata);
+size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* userdata);
 
 /**
 	@brief Reads file in blocks.
@@ -613,29 +613,31 @@ void** tou_llist_gather_dat1(tou_llist* list, size_t* len);
 void** tou_llist_gather_dat2(tou_llist* list, size_t* len);
 
 /* == Static linked list == */
-/*typedef struct tou_sll {
+
+typedef struct tou_sll {
 	struct tou_sll* prev;
 	struct tou_sll* next;
 	//void* data;
 } tou_sll;
+
  
-tou_sll** tou_sll_append(tou_sll** list, void* dat1, char dat1_is_dynalloc)
-{
-	tou_sll** curr_head = (tou_sll**) list;
-	// tou_sll* new_head = malloc(sizeof(*new_head));
-	tou_sll* new_head = _next_free_elem();
+// tou_sll** tou_sll_append(tou_sll** list, void* dat1, char dat1_is_dynalloc)
+// {
+// 	tou_sll** curr_head = (tou_sll**) list;
+// 	tou_sll* new_head = malloc(sizeof(*new_head));
+// 	//tou_sll* new_head = _next_free_elem();
 
-	new_head->prev = *curr_head;
-	new_head->next = NULL;
-	if (*curr_head != NULL)
-		(*curr_head)->next = new_head;
+// 	new_head->prev = *curr_head;
+// 	new_head->next = NULL;
+// 	if (*curr_head != NULL)
+// 		(*curr_head)->next = new_head;
 
-	new_head->dat1 = dat1;
-	new_head->destroy_dat1 = dat1_is_dynalloc;
+// 	new_head->dat1 = dat1;
+// 	new_head->destroy_dat1 = dat1_is_dynalloc;
 
-	*curr_head = new_head;
-	return curr_head;
-}*/
+// 	*curr_head = new_head;
+// 	return curr_head;
+// }
 // #define tou_sll_new(varname, n, sizeofone) tou_sll varname[(n)*((sizeofone)+sizeof(tou_sll))] = {0};
 
 
@@ -1002,49 +1004,34 @@ tou_llist* tou_split(char* str, char* delim)
 }
 
 
-/*  */
-char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize, tou_func3 cb, void* userdata)
+size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* userdata)
 {
 	// Clamp blocksize to TOU_DEFAULT_BLOCKSIZE if not in following range:
 	if (blocksize < 1 || blocksize > 0xFFFFFF) {
 		blocksize = TOU_DEFAULT_BLOCKSIZE;
-		TOU_DEBUG( printf(TOU_DEBUG_PREFIX "clamping blocksize to " TOU_MSTR(TOU_DEFAULT_BLOCKSIZE)"\n") );
+		//TOU_DEBUG( printf(TOU_DEBUG_PREFIX "[tou_read_fp_in_blocks] clamping blocksize to " TOU_MSTR(TOU_DEFAULT_BLOCKSIZE)"\n") );
+		TOU_PRINTD("[tou_read_fp_in_blocks] clamping blocksize to "TOU_MSTR(TOU_DEFAULT_BLOCKSIZE)"\n");
 	}
 
-	size_t curr_bufsize = blocksize;
+	size_t curr_bufsize = 0;
 	char blockbuf[blocksize];
-	char* filebuf = NULL;
-	if ((filebuf = malloc(curr_bufsize)) == NULL) {
-		TOU_DEBUG( printf(TOU_DEBUG_PREFIX "error allocating initial %zu bytes\n", curr_bufsize) );
-		return NULL;
-	}
+	size_t bytes_read = 0;
 
-	filebuf[0] = '\0';
-
-	size_t rlen = 0;
 	while (1) {
+		// Clear buf
+		memset(blockbuf, 0, blocksize);
+
+		// Load data into buf
 		size_t cnt = fread(blockbuf, 1, blocksize, fp);
 		if (cnt <= 0)
 			break;
 
-		rlen += cnt;
+		// Store real read length
+		bytes_read += cnt;
 
-		curr_bufsize += blocksize;
-		char* newbuf = realloc(filebuf, curr_bufsize);
-		if (!newbuf) {
-			TOU_DEBUG( printf(TOU_DEBUG_PREFIX "error allocating %d bytes\n", curr_bufsize) );
-			// if (fp != stdin) fclose(fp);
-			// if (read_len) *read_len = rlen-cnt;
-			// return NULL;
-			rlen -= cnt;
-			break;
-		}
-
-		filebuf = newbuf;
-		strcat(filebuf, blockbuf);
-
+		// Do the useful things
 		if (cb) {
-			if (cb(filebuf, (void*) cnt, userdata) == 0) {
+			if (cb(blockbuf, (void*) cnt, userdata) == TOU_BREAK) {
 				// User stopped iteration
 				TOU_PRINTD("[tou_read_fp_in_blocks] iteration aborted.\n");
 				break;
@@ -1052,14 +1039,45 @@ char* tou_read_fp_in_blocks(FILE* fp, size_t* read_len, size_t blocksize, tou_fu
 		}
 	}
 
-	if (fp != stdin)
-		fclose(fp);
-
-	if (read_len)
-		*read_len = rlen;
-	return filebuf;
+	// if (read_len)
+	// 	*read_len = bytes_read;
+	return bytes_read;
 }
 
+/** @brief Struct containing char** representing ptr to buffer and size_t representing current size of buffer */
+typedef struct {
+	char* buffer;
+	size_t size;
+} tou_block_store_struct;
+
+/*  */
+void* tou_block_store_cb(void* blockdata, void* len, void* userdata)
+{
+	// - blockdata [in] Pointer to the beginning of new data
+	// - len [in] Amount of bytes actually read
+	// - userdata [in] User data provided
+
+	char* block = (char*) blockdata;
+	size_t size = (size_t) len;
+	tou_block_store_struct* data = (tou_block_store_struct*) userdata;
+
+	// TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s\n===== (%zu)\n", size, block, size);
+
+	if (size > 0) {
+		char* new_buffer = realloc(data->buffer, data->size + size);
+		if (!new_buffer){ 
+			TOU_PRINTD("[tou_block_store_cb] cannot realloc memory\n");
+			// return (void*) TOU_BREAK;
+		} else {
+			strcpy(new_buffer + data->size, block);
+			data->buffer = new_buffer;
+			data->size += size;
+			TOU_PRINTD("[tou_block_store_cb] appended block {size=%zu}\n", data->size);
+		}
+	}
+	
+	return (void*) TOU_CONTINUE;
+}
 
 /*  */
 char* tou_read_file(const char* filename, size_t* read_len)
@@ -1068,18 +1086,24 @@ char* tou_read_file(const char* filename, size_t* read_len)
 	if (!filename || strlen(filename) == 0 || strcmp("stdin", filename) == 0) { // stdin
 		fp = stdin;
 	} else if ((fp = fopen(filename, "r")) == NULL) { // file
-		// TOU_DEBUG( printf(TOU_DEBUG_PREFIX "cannot open '%s'\n", filename) );
 		TOU_PRINTD("[read_file] cannot open '%s'\n", filename);
 		return NULL;
 	}
 
-	// TOU_DEBUG( printf(TOU_DEBUG_PREFIX "reading from: %s\n", (fp==stdin) ? "STDIN" : filename) );
 	TOU_PRINTD("[read_file] reading from: %s\n", (fp==stdin) ? "STDIN" : filename);
-	char* read = tou_read_fp_in_blocks(fp, read_len, -1, NULL, NULL); // default block size, without function
 
+	// char* read = tou_read_fp_in_blocks(fp, read_len, -1, NULL, NULL); // default block size, without function
+	// tou_read_fp_in_blocks -> (FILE* fp, size_t* read_len, size_t blocksize, tou_func3 cb, void* userdata)
+	tou_block_store_struct tmp = {NULL, 0};
+	tou_read_fp_in_blocks(fp, TOU_DEFAULT_BLOCKSIZE, tou_block_store_cb, &tmp);
+	
 	if (fp != stdin)
 		fclose(fp);
-	return read;
+
+	if (read_len)
+		*read_len = tmp.size;
+
+	return tmp.buffer;
 }
 
 

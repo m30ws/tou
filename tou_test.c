@@ -27,15 +27,32 @@ void* cb_ini2(void* ptr, void* userdata)
 	return (void*)(size_t) strcmp(elem->dat1, userdata);
 } */
 
-/* void* cbtok(void* ptr)
+/* void* cb_tok(void* ptr)
 {
 	printf("Token <%s>\n", ((tou_llist*)ptr)->dat1);
 	return (void*) 1;
 } */
 
-/* void* cbblock3(void* data, void* len, void* userdata)
+/* void* cb_fileread(void* blockdata, void* len, void* userdata)
 {
-	printf("Block\n=====\n%s\n===== (%zu)\n", (char*)data, (size_t)len);
+	char* block = (char*) blockdata;
+	size_t size = (size_t) len;
+	char** filedata = (char**) userdata;
+
+	size_t currsize = strlen(*filedata);
+
+	if (size > 0) {
+		char* new_buffer = realloc(*filedata, currsize + size);
+
+		if (!new_buffer){ 
+			TOU_PRINTD("cannot realloc memory\n");
+			return (void*) TOU_BREAK;
+		}
+
+		strcpy(new_buffer + currsize, block);
+		*filedata = new_buffer;
+	}
+	
 	return (void*) TOU_CONTINUE;
 } */
 
@@ -44,15 +61,41 @@ int main(int argc, char const* argv[])
 {
 	// File read test //
 /*
-	char* contents = tou_read_file("testfile.txt", NULL);
-	printf("tou_read_file contents:\n%s", contents);
+	size_t siz;
+	FILE* fptr;
+	char* contents;
+
+	// 1. Read file simply using filename
+	contents = tou_read_file("testfile.txt", &siz);
+	printf("tou_read_file contents:\n|%s|\nSize: %zu, %d\n", contents, siz, strlen(contents));
+	free(contents); contents = NULL;
+	
+	// 2. Read FILE* using custom function
+	contents = strdup(""); // malloc with just '\0' since we're using strlen in the function
+	
+	fptr = fopen("testfile.txt", "r");
+	siz = tou_read_fp_in_blocks(fptr, -1, cb_fileread, &contents);
+	fclose(fptr); fptr = NULL;
+	
+	printf("\ntou_read_fp_in_blocks contents (%zu):\n%s", siz, contents);
+	
 	free(contents); contents = NULL;
 
-	FILE* fptr = fopen("testfile.txt", "r");
-	contents = tou_read_fp_in_blocks(fptr, 0,0,cbblock3,0);
-	fclose(fptr);
-	printf("\ntou_read_fp_in_blocks contents:\n%s", contents);
-	free(contents); contents = NULL;
+	// 3. Use tou-defined func+struct for reading FILE* (this is how tou_read_file() is implemented)
+	tou_block_store_struct my_data_buf = {NULL, 0};
+	
+	fptr = fopen("testfile.txt", "r");
+	tou_read_fp_in_blocks(fptr, -1, tou_block_store_cb, &my_data_buf); // default block size, without function
+	fclose(fptr); fptr = NULL;
+	
+	printf("I have read (%zu):\n%s\n", my_data_buf.size, my_data_buf.buffer);
+	
+	free(my_data_buf.buffer); my_data_buf.buffer = NULL;
+
+	// 4. Retrieve only file size
+	fptr = fopen("testfile.txt", "r");
+	printf("File size: %zu\n", tou_read_fp_in_blocks(fptr, 0,0,0));
+	fclose(fptr); fptr = NULL;
 */
 
 	// Function pointer test //
@@ -255,7 +298,7 @@ int main(int argc, char const* argv[])
 
 	printf("Iterating using _llist_iter():\n");
 	iter = splitted; // tou_llist_get_head(splitted);
-	tou_llist_iter( iter, cbtok );
+	tou_llist_iter( iter, cb_tok );
 
 	tou_llist_destroy(splitted);
 */
@@ -381,8 +424,9 @@ int main(int argc, char const* argv[])
 	tou_llist_destroy(tst);
 */
 
-
 /*
+	// statically allocated linked list WIP //
+
 	typedef struct {
 		char name[31+1];
 		char surname[31+1];
@@ -451,7 +495,7 @@ int main(int argc, char const* argv[])
 	
 	//printf("1) %p, 2) %p\n", tst->prev, tst->next);//, tst->)
 */
-
+	printf("size: %d\n", sizeof(tou_sll));
 
 	printf("\nDone.\n");
 	return 0;

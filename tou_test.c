@@ -9,27 +9,27 @@
 
 /* void* cb(void* ptr, void* _userdata)
 {
-	tou_llist* elem = (tou_llist*) ptr;
+	tou_llist_t* elem = (tou_llist_t*) ptr;
 	return (void*)(size_t) strcmp(elem->dat1, "test07");
 } */
 
-/* void* cb_ini(void* ptr, void* userdata)
+void* cb_ini(void* ptr, void* userdata)
 {
-	tou_llist* elem = (tou_llist*) ptr;
+	tou_llist_t* elem = (tou_llist_t*) ptr;
 	printf("CB_INI got: %s, %s\n", elem->dat1, elem->dat2);
 	return (void*)(size_t) strcmp(elem->dat1, userdata);
 }
 
 void* cb_ini2(void* ptr, void* userdata)
 {
-	tou_llist* elem = (tou_llist*) ptr;
+	tou_llist_t* elem = (tou_llist_t*) ptr;
 	printf("CB_INI2 got: %s, %s\n", elem->dat1, elem->dat2);
 	return (void*)(size_t) strcmp(elem->dat1, userdata);
-} */
+}
 
 /* void* cb_tok(void* ptr)
 {
-	printf("Token <%s>\n", ((tou_llist*)ptr)->dat1);
+	printf("Token <%s>\n", ((tou_llist_t*)ptr)->dat1);
 	return (void*) 1;
 } */
 
@@ -106,10 +106,10 @@ int main(int argc, char const* argv[])
 
 	// Linked list test //
 /*
-	printf("Sizeof tou_llist: %d\n", sizeof(tou_llist));
+	printf("Sizeof tou_llist_t: %d\n", sizeof(tou_llist_t));
 
-	tou_llist* head = tou_llist_new(); //= NULL;
-	tou_llist** elem;
+	tou_llist_t* head = tou_llist_new(); //= NULL;
+	tou_llist_t** elem;
 	// Append
 	for (int i = 0; i < 12; i++) {
 		char* txt = malloc(16+1);
@@ -123,7 +123,7 @@ int main(int argc, char const* argv[])
 	}
 
 	// Get tail
-	tou_llist* firstelem = tou_llist_get_tail(*elem);
+	tou_llist_t* firstelem = tou_llist_get_tail(*elem);
 	while (firstelem) {
 
 		#ifdef TOU_LLIST_SINGLE_ELEM
@@ -138,7 +138,7 @@ int main(int argc, char const* argv[])
 	printf("\n");
 
 	// Get head
-	tou_llist* lastelem = tou_llist_get_head(head);
+	tou_llist_t* lastelem = tou_llist_get_head(head);
 	while (lastelem) {
 
 		#ifdef TOU_LLIST_SINGLE_ELEM
@@ -162,7 +162,7 @@ int main(int argc, char const* argv[])
 	#endif
 
 	// Pop it
-	tou_llist* poppedelem = tou_llist_pop(*elem);
+	tou_llist_t* poppedelem = tou_llist_pop(*elem);
 
 	// Get tail
 	firstelem = tou_llist_get_tail(head);
@@ -287,8 +287,8 @@ int main(int argc, char const* argv[])
 	char str[] = "abc = 123,def = 456;";
 	char delim[] = " = ";
 
-	tou_llist* splitted = tou_split(str, delim);
-	tou_llist* iter = splitted;
+	tou_llist_t* splitted = tou_split(str, delim);
+	tou_llist_t* iter = splitted;
 	
 	printf("Iterating by hand:\n");
 	while (iter) {
@@ -303,8 +303,26 @@ int main(int argc, char const* argv[])
 	tou_llist_destroy(splitted);
 */
 
+	// Character/string replacing test //
+/*	
+	char repl_ss[] = "aeiouoiea/1/2/3";
+	printf("original = %s\n\n", repl_ss);
+	printf("strchr(i) = %s\n", tou_strchr(repl_ss, 'i'));
+	printf("strrchr(i) = %s\n", tou_strrchr(repl_ss, 'i'));
+	printf("strchr(a) = %s\n", tou_strchr(repl_ss, 'a'));
+	printf("strrchr(a) = %s\n", tou_strrchr(repl_ss, 'a'));
+	printf("strchr(\\0) = %s\n", tou_strchr(repl_ss, '\0'));
+	printf("strrchr(\\0) = %s\n", tou_strrchr(repl_ss, '\0'));
+	printf("strchr(/) = %s\n", tou_strchr(repl_ss, '/'));
+	printf("strrchr(/) = %s\n", tou_strrchr(repl_ss, '/'));
+	printf("original after = %s\n\n", repl_ss);
+
+	tou_replace_ch(repl_ss, 'o', 'F');
+	printf("original at the end = %s\n\n", repl_ss);
+*/
+
 	// .INI test //
-/*
+
 	// char* inicontents = tou_read_file_in_blocks("testini.ini", NULL, NULL, NULL);
 	// printf("File contents:\n|%s|\n", inicontents);
 	// void* parsed = tou_ini_parse(inicontents);
@@ -315,7 +333,7 @@ int main(int argc, char const* argv[])
 //int oldstdout = tou_disable_stdout();
 
 	FILE* fp = fopen("testini.ini", "r");
-	tou_llist* inicontents = tou_ini_parse_fp(fp);
+	tou_llist_t* inicontents = tou_ini_parse_fp(fp);
 	fclose(fp);
 	printf("Parsed ptr: %p\n", inicontents);
 	printf("\n");
@@ -347,7 +365,7 @@ int main(int argc, char const* argv[])
 
 	printf("Ini get first,surname: %s\n", tou_ini_get(&inicontents, "first", "surname"));
 
-	tou_llist* prop = *(tou_ini_get_property(&inicontents, "first", "surname"));
+	tou_llist_t* prop = *(tou_ini_get_property(&inicontents, "first", "surname"));
 	printf("Ini get property first,surname: %s, %s\n\n", prop->dat1, prop->dat2);
 	
 	printf("Ini set first,name,Giuseppe: %s\n", tou_ini_set(&inicontents, "first", "name", "Giuseppe"));
@@ -360,13 +378,13 @@ int main(int argc, char const* argv[])
 
 	// Test _llist_find_func()
 	printf("Finding using llist_find_func cb_ini,'first': \n");
-	tou_llist** ret = tou_llist_find_func(&inicontents, cb_ini,"first");
+	tou_llist_t** ret = tou_llist_find_func(&inicontents, cb_ini,"first");
 	if (ret == NULL) {
 		printf(" @ ret = null  RAAAAGHHHH no section 'first' found\n");
 	} else {
 		printf(" $ Found: %s, %s\n", (*ret)->dat1, (*ret)->dat2);
 		printf("Finding using llist_find_func cb_ini2,'name': \n");
-		tou_llist** ret2 = tou_llist_find_func(TOU_LLIST_DAT_ADDR(ret, dat2), cb_ini2,"name");
+		tou_llist_t** ret2 = tou_llist_find_func(TOU_LLIST_DAT_ADDR(ret, dat2), cb_ini2,"name");
 		if (ret2 == NULL) {
 			printf(" @ ret2 = null  RAAAAAGGHHHH no property 'name' found\n");
 		} else {
@@ -375,12 +393,21 @@ int main(int argc, char const* argv[])
 	}
 	printf("\n");
 
-	FILE* fpout = fopen("testini.out.ini", "w");
-	int retval = tou_ini_save_fp(inicontents, fpout);
-	// FILE* fpout = fopen("testini.out.json", "w");
-	// int retval = tou_ini_save_fp_json(inicontents, fpout);
+	FILE* fpout = NULL;
+	int retval = 0;
+	
+	fpout = fopen("testini.out.ini", "w");
+	retval = tou_ini_save_fp(inicontents, fpout);
+	TOU_PRINTD("INI save .ini return: %d\n\n", retval);
 	fclose(fpout);
-	printf("Ini save return val: %d\n\n", retval);
+	fpout = fopen("testini.out.json", "w");
+	retval = tou_ini_save_fp_json(inicontents, fpout);
+	TOU_PRINTD("INI save .json return: %d\n\n", retval);
+	fclose(fpout);
+	fpout = fopen("testini.out.xml", "w");
+	retval = tou_ini_save_fp_xml(inicontents, fpout);
+	TOU_PRINTD("INI save .xml return: %d\n\n", retval);
+	fclose(fpout);
 
 	// Obliterate 
 	tou_ini_destroy(inicontents);
@@ -388,7 +415,7 @@ int main(int argc, char const* argv[])
 //tou_enable_stdout(oldstdout);
 //printf("AFTER enabled stdout again...\n");
 
-*/
+
 
 	// Server test (WIP) //
 /*
@@ -400,9 +427,9 @@ int main(int argc, char const* argv[])
 */
 
 /*
-	//extern tou_llist* testfunc();
+	//extern tou_llist_t* testfunc();
 
-	tou_llist* tst = NULL;//testfunc();
+	tou_llist_t* tst = NULL;//testfunc();
 	tou_llist_append(&tst, tou_strdup("str1"), 0, 1,0);//11 ,1,0);
 	tou_llist_append(&tst, tou_strdup("str2"), 0, 1,0);//22 ,1,0);
 
@@ -423,79 +450,6 @@ int main(int argc, char const* argv[])
 	free(res2);
 	tou_llist_destroy(tst);
 */
-
-/*
-	// statically allocated linked list WIP //
-
-	typedef struct {
-		char name[31+1];
-		char surname[31+1];
-		int age;
-		void* extra_data;
-	} payload_example;
-	printf("sss %d\n", sizeof(payload_example));
-
-	typedef struct {
-		int id;
-		char free;
-		// "3" more bytes free here inbetween
-		size_t size;
-	} memfrag;
-
-	#define tou_sll_new(varname, n, sizeofone) \
-		char _##varname##__ [(n)*(sizeof(tou_sll)+(sizeofone))] = {0}; \
-		tou_sll* varname = (tou_sll*) _##varname##__;
-
-	// tou_sll_new(tst, 10, sizeof(memfrag));
-	// -> is actually:  tou_sll varname[(n)*((sizeofone)+sizeof(tou_sll))] = {0};
-	// -> or:           tou_sll tst[10 * (sizeof(memfrag) + sizeof(tou_sll))] = {0};
-
-	printf("sizeof(tou_sll) = %d, sizeof(memfrag) = %d\n\n", sizeof(tou_sll), sizeof(memfrag));
-
-	#define LEN_SLL 10
-	//char tst[LEN_SLL * (sizeof(tou_sll) + sizeof(memfrag))] = {0};
-	tou_sll_new(tst, 10, sizeof(memfrag));
-	const size_t SIZE_SLL_ELEM = sizeof(tou_sll) + sizeof(memfrag);
-
-	#define SLL_FROM_MEM(mem, idx) ((tou_sll*)((char*)(mem) + (idx)*SIZE_SLL_ELEM + 0))
-	#define FRG_FROM_MEM(mem, idx) ((memfrag*)((char*)(mem) + (idx)*SIZE_SLL_ELEM + sizeof(tou_sll)))
-	#define FRG_FROM_SLL(sll)      ((memfrag*)(((char*)(sll)) + sizeof(tou_sll)))
-
-	for (size_t i = 0; i < LEN_SLL; i++) {
-		tou_sll* sll_elem = SLL_FROM_MEM(tst, i); //(tou_sll*)(tst + i*SIZE_SLL_ELEM + 0);
-		memfrag* mfr_elem = FRG_FROM_MEM(tst, i); //(memfrag*)(tst + i*SIZE_SLL_ELEM + sizeof(tou_sll));
-
-		printf("tou_sll* sll_elem = %p\nmemfrag* mfr_elem = %p\n", sll_elem, mfr_elem);
-
-		if (i > 0) {
-			sll_elem->prev = SLL_FROM_MEM(tst, i-1);
-		} else {
-			sll_elem->prev = NULL;
-		}
-
-		if (i < LEN_SLL-1) {
-			sll_elem->next = SLL_FROM_MEM(tst, i+1);
-		} else {
-			sll_elem->next = NULL;
-		}
-
-		mfr_elem->id = i;
-		mfr_elem->free = 1;
-		mfr_elem->size = 0;
-	}
-
-	printf("\nAlright, time to try reading data as list.\n");
-	tou_sll* sll_elem = SLL_FROM_MEM(tst, 0);
-	memfrag* mfr_elem = FRG_FROM_SLL(sll_elem);//FRG_FROM_MEM(tst, 0);
-
-	while (sll_elem) {
-		printf("SLL elem: (%p) id=%d  [%p]\n", sll_elem, FRG_FROM_SLL(sll_elem)->id, sll_elem->prev);
-		sll_elem = sll_elem->next;
-	}
-	
-	//printf("1) %p, 2) %p\n", tst->prev, tst->next);//, tst->)
-*/
-	printf("size: %d\n", sizeof(tou_sll));
 
 	printf("\nDone.\n");
 	return 0;

@@ -2,7 +2,7 @@
 	@file tou.h
 	@brief Tou header library
 	@author m30ws
-	@version 1.2 (20240803)
+	@version 1.2 (20240804)
 
 	Git repo: https://github.com/m30ws/tou/
 
@@ -743,8 +743,8 @@ char* tou_replace_ch(char* ss, char oldch, char newch);
 /**
 	@brief Parses given FILE* as .INI file and constructs structured data.
 
-	Parser supports using semicolon (;), hashtag (#) and percent (%) for
-	comments, however they must be on a separate line by themselves.
+	Parser supports using semicolon (;) and hashtag (#) comments,
+	however they must be on a separate line by themselves.
 	Specifying the same section name more than once is not supported (that
 	may change in the future where the definitions would merge and "flatten"
 	into one combined section).
@@ -1716,9 +1716,6 @@ void** tou_llist_gather_dat2(tou_llist_t* list, size_t* len)
 }
 
 
-// tou_sll_t
-
-
 /*  */
 tou_llist_t* tou_ini_parse_fp(FILE* fp)
 {
@@ -1741,8 +1738,11 @@ tou_llist_t* tou_ini_parse_fp(FILE* fp)
 			continue;
 
 		// Comment line
-		if (*line == ';' || *line == '#' || *line == '%')
-			continue;
+		switch(*line) {
+			case ';':
+			case '#':
+				continue;
+		}
 
 		// Section indication
 		if (*line == '[') {

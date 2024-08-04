@@ -1,6 +1,13 @@
 /** 
 	@file tou.h
 	@brief Tou header library
+	@author m30ws
+	@version 1.2 (20240803)
+
+	Git repo: https://github.com/m30ws/tou/
+
+	Details
+	-------
 
 	Required always but only once! :
 	- #define TOU_IMPLEMENTATION
@@ -12,10 +19,10 @@
 	- full linked list impl
 	- reading file in blocks (filename or FILE*)
 	- string splitter, trimmer etc. different operations
-	- .INI file parser / exporter(+JSON)
-	- xml (todo)
+	- .INI file parser / exporter(+JSON,XML)
 	- safer string functions
 	- disabling And restoring stdout
+	- xml parser (todo)
 	- statically allocated linked list (todo)
 	- asset embedding (todo)
 	
@@ -414,7 +421,7 @@ char* tou_read_file(const char* filename, size_t* read_len);
 /* == System/IO control == */
 
 /**
-	@brief Redirects STDOUT to /dev/null or NUL: files.
+	@brief Redirects STDOUT to `/dev/null` (or `NUL:` on Windows)
 
 	Return value should be saved if you wish to
 	restore STDOUT function.

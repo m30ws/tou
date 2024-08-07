@@ -2,7 +2,7 @@
 	@file tou.h
 	@brief Tou header library
 	@author m30ws
-	@version 1.2 (20240804)
+	@version 1.3 (20240807)
 
 	Git repo: https://github.com/m30ws/tou/
 
@@ -10,13 +10,13 @@
 	-------
 
 	Required always but only once! :
-	- #define TOU_IMPLEMENTATION
+	- \#define TOU_IMPLEMENTATION
 	
 	Other various defines:
-	- #define TOU_LLIST_SINGLE_ELEM
+	- \#define TOU_LLIST_SINGLE_ELEM
 	
 	Things:
-	- full linked list impl
+	- full linked list impl (todo: improve/cleanup error checking)
 	- reading file in blocks (filename or FILE*)
 	- string splitter, trimmer etc. different operations
 	- .INI file parser / exporter(+JSON,XML)
@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 /**
 	@addtogroup grp_debug Debug options
@@ -52,7 +53,7 @@
 /**
 	@brief Place a block of code inside that you wish to enable if debugging
  
-	It's not a #define but should get optimized
+	It's not a \#define but should get optimized
 */
 #ifndef TOU_DEBUG
 #define TOU_DEBUG(x) if (TOU_DBG) { x; } else (void)0
@@ -152,26 +153,16 @@ enum tou_iter_action {
 
 /**
 	@brief Arbitrary function pointer with 1 parameter
-
-	@param void* Parameter
-	@return void* Return value
 */
 typedef void* (*tou_func)(void*);
+
 /**
 	@brief Arbitrary function pointer with 2 parameters
-
-	@param void* First parameter
-	@param void* Second parameter
-	@return void* Return value
 */
 typedef void* (*tou_func2)(void*, void*);
+
 /**
 	@brief Arbitrary function pointer with 3 parameters
-
-	@param void* First parameter
-	@param void* Second parameter
-	@param void* Third parameter
-	@return void* Return value
 */
 typedef void* (*tou_func3)(void*, void*, void*);
 
@@ -350,7 +341,6 @@ char* tou_trim_front(char** str);
 */
 void tou_trim_back(char** str);
 
-
 /**
 	@brief Returns pointers to the first and last
 	character that are not whitespaces.
@@ -379,6 +369,22 @@ char* tou_trim_front_pure(char* str);
 */
 char* tou_trim_back_pure(char* str);
 
+/**
+	@brief Converts all characters in `str` to lowercase in-place.
+
+	@param[in,out] str String to convert
+	@return Pointer to the same string
+*/
+char* tou_strlower(char* str);
+
+/**
+	@brief Converts all characters in `str` to uppercase in-place.
+
+	@param[in,out] str String to convert
+	@return Pointer to the same string
+*/
+char* tou_strupper(char* str);
+
 /** @} */
 
 /* == File operations == */
@@ -404,6 +410,34 @@ char* tou_trim_back_pure(char* str);
 	@return Total bytes read
 */
 size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* userdata);
+
+/**
+	@addtogroup grp_file_lower Lower file operations
+	@{
+*/
+
+/**
+	@brief Struct containing buffer and count to be used in block-reading
+*/
+typedef struct {
+	char* buffer; /**< @brief Buffer to append data to */
+	size_t size; /**< @brief Length of the buffer contents */
+} tou_block_store_struct;
+
+/**
+	@brief Appends the given block to the buffer in `tou_block_store_struct` using realloc().
+
+	Memory for '\0' at the end will be allocated, but will not be indicated in `.size`
+	parameter.
+
+	@param[in] blockdata Pointer to the beginning of new data
+	@param[in] len Amount of bytes actually read
+	@param[in] userdata User data provided
+	@return Whether to continue with read iterations (::tou_iter_action)
+*/
+void* tou_block_store_cb(void* blockdata, void* len, void* userdata);
+
+/** @} */
 
 /**
 	@brief Reads file in blocks.
@@ -473,7 +507,7 @@ void tou_enable_stdout(int saved_fd);
 /** 
 	@brief Creates/initializes new llist.
 	
-	Define creation of a new llist through #define so even though it
+	Define creation of a new llist through \#define so even though it
 	doesn't require anything more than =NULL currently it would be
 	easier to extend in the future if a need for such initializer arises.
 */
@@ -694,24 +728,6 @@ void** tou_llist_gather_dat2(tou_llist_t* list, size_t* len);
 */
 
 /**
-	@brief Finds start of substring(keyword) in the given char*.
-	
-	@param[in] ptr Source string
-	@param[in] kwd Which keyword to search for
-	@return Pointer to the beginning of the keyword in the text or NULL
-*/
-char* tou_find_string_start(char* ptr, char* kwd);
-
-/**
-	@brief Splits string using a delimiter that may be longer than one character.
-
-	@param[in] str String to be split
-	@param[in] delim Delimiter string
-	@return Linked list containing tokens
-*/
-tou_llist_t* tou_split(char* str, char* delim);
-
-/**
 	@brief Replaces all occurences of `oldch` with `newch`
 
 	Be careful not to pass pointer like this:
@@ -730,6 +746,78 @@ tou_llist_t* tou_split(char* str, char* delim);
 */
 char* tou_replace_ch(char* ss, char oldch, char newch);
 
+/**
+	@brief Finds start of substring(keyword) in the given char*.
+	
+	@param[in] ptr Source string
+	@param[in] kwd Which keyword to search for
+	@return Pointer to the beginning of the keyword in the text or NULL
+*/
+char* tou_find_string_start(char* ptr, char* kwd);
+
+/**
+	@brief Splits string using a delimiter that may be longer than one character.
+
+	@param[in] str String to be split
+	@param[in] delim Delimiter string
+	@return Linked list containing tokens
+*/
+tou_llist_t* tou_split(char* str, char* delim);
+
+/**
+	@brief (Re)allocates enough memory for src and appends it to dst
+
+	Does not know the size of the original destination and will not
+	consider it!
+
+	@param[in] dst String which will be expanded and copied into
+	@param[in] src String to copy
+	@return Realloc'd pointer with combined strings
+*/
+char* tou_sappend(char* dst, char* src);
+
+/**
+	@brief (Re)allocates enough memory for src and prepends it to dst
+
+	Does not know the size of the original destination and will not
+	consider it!
+
+	@param[in] dst String which will be expanded and copied into
+	@param[in] src String to copy
+	@return Realloc'd pointer with combined strings
+*/
+char* tou_sprepend(char* dst, char* src);
+
+/**
+ * @brief Replaces string `repl_str` with `with_str` in the `str`,
+ *        testing `str` up to the character `len`.
+ * 
+ * When all tokens that can be found are replaces, the remainder of the `str`
+ * (until '\0' is found) is copied to the end of the buffer.
+ * If parameter `len` is set to 0, the whole string will be taken into consideration.
+ * Cutting off is performed by temporarily modifying original string and placing '\0' at that position,
+ * which is removed right after no more tokens to be replaced can be found.
+ * 
+ * @param[in,out] str String to be searched for tokens
+ * @param[in] repl_str String to replace
+ * @param[in] with_str String to replace with
+ * @param[in] len Max length of the original string to consider
+ * @return Pointer to the newly allocated replaced string
+ * 
+ */
+char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len);
+
+/**
+ * @brief Helper for `tou_sreplace` that takes the whole string into consideration.
+ * 
+ * @param[in,out] str String to be searched for tokens
+ * @param[in] repl_str String to replace
+ * @param[in] with_str String to replace with
+ * @return Pointer to the newly allocated replaced string
+ *
+ */
+char* tou_sreplace(char* str, char* repl_str, char* new_str);
+
 /** @} */
 
 
@@ -743,7 +831,7 @@ char* tou_replace_ch(char* ss, char oldch, char newch);
 /**
 	@brief Parses given FILE* as .INI file and constructs structured data.
 
-	Parser supports using semicolon (;) and hashtag (#) comments,
+	Parser supports using semicolon (;) and hashtag (#) for comments,
 	however they must be on a separate line by themselves.
 	Specifying the same section name more than once is not supported (that
 	may change in the future where the definitions would merge and "flatten"
@@ -782,6 +870,11 @@ void tou_ini_destroy(tou_llist_t* inicontents);
 void tou_ini_print(tou_llist_t* inicontents);
 
 /**
+	@addtogroup grp_ini_lower Lower level functions
+	@{
+*/
+
+/**
 	@brief Returns pointer to the section element matching given 'section_name'.
 
 	@param[in] inicontents Pointer to the parsed .INI structure
@@ -800,6 +893,8 @@ tou_llist_t** tou_ini_get_section(tou_llist_t** inicontents, const char* section
 */
 tou_llist_t** tou_ini_get_property(tou_llist_t** inicontents, const char* section_name, const char* key);
 
+/** @} */
+
 /**
 	@brief Returns the contents of 'key' under the given 'section_name'.
 
@@ -808,7 +903,7 @@ tou_llist_t** tou_ini_get_property(tou_llist_t** inicontents, const char* sectio
 	@param[in] key 
 	@return Pointer to the contents, or NULL
 */
-char* tou_ini_get(tou_llist_t** inicontents, const char* section_name, const char* key);
+void* tou_ini_get(tou_llist_t** inicontents, const char* section_name, const char* key);
 
 /**
 	@brief Sets the contents of 'key' under the given 'section_name'
@@ -820,7 +915,25 @@ char* tou_ini_get(tou_llist_t** inicontents, const char* section_name, const cha
 	@param[in] new_value 
 	@return Pointer to the new value that was stored in struct, or NULL
 */
-char* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value);
+void* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value);
+
+/**
+	@brief Return a pointer to the llist entry of the matching section, or NULL.
+
+	@param[in] inicontents Pointer to the parsed .INI structure
+	@param[in] section_name 
+	@return Pointer to the section
+*/
+tou_llist_t* tou_ini_section(tou_llist_t** inicontents, const char* section_name);
+
+/**
+	@brief Return the value of the matching property in the given section, or NULL.
+
+	@param[in] section Pointer to the parsed .INI structure
+	@param[in] property_name 
+	@return Value of the property
+*/
+void* tou_ini_property(tou_llist_t* section, const char* property_name);
 
 /**
 	@brief Writes .INI structure data to file stream.
@@ -1068,6 +1181,43 @@ char* tou_trim_back_pure(char* str)
 
 
 /*  */
+char* tou_strlower(char* str)
+{
+	if (!str)
+		return NULL;
+
+	char* ptr = str;
+	while (*ptr++ = tolower(*ptr)) ;
+	return str;
+}
+
+/*  */
+char* tou_strupper(char* str)
+{
+	if (!str)
+		return NULL;
+
+	char* ptr = str;
+	while (*ptr++ = toupper(*ptr)) ;
+	return str;
+}
+
+
+/*  */
+char* tou_replace_ch(char* ss, char oldch, char newch)
+{
+	TOU_PRINTD("[replace_ch] replacing ('%c'->'%c') \"%s\" => ", oldch, newch, ss);
+	char* ptr = tou_strchr(ss, oldch);
+	while (ptr) {
+		*ptr = newch;
+		ptr = tou_strchr(ptr + 1, oldch);
+	}
+	TOU_PRINTD("\"%s\"\n", ss);
+	return ss;
+}
+
+
+/*  */
 char* tou_find_string_start(char* ptr, char* kwd)
 {
 	int kwd_len = strlen(kwd);
@@ -1137,25 +1287,125 @@ tou_llist_t* tou_split(char* str, char* delim)
 
 
 /*  */
-char* tou_replace_ch(char* ss, char oldch, char newch)
+char* tou_sappend(char* dst, char* src)
 {
-	TOU_PRINTD("[replace_ch] replacing ('%c'->'%c') \"%s\" => ", oldch, newch, ss);
-	char* ptr = tou_strchr(ss, oldch);
-	while (ptr) {
-		*ptr = newch;
-		ptr = tou_strchr(ptr + 1, oldch);
-	}
-	TOU_PRINTD("\"%s\"\n", ss);
-	return ss;
+	size_t dst_len = strlen(dst);
+	size_t src_len = strlen(src);
+
+	size_t new_size = dst_len + src_len + 1;
+	dst = realloc(dst, new_size);
+	// tou_strlcat(dst, src, new_size);
+	tou_strlcpy(dst + dst_len, src, new_size);
+
+	return dst;
 }
 
 
+/*  */
+char* tou_sprepend(char* dst, char* src)
+{
+	size_t dst_len = strlen(dst);
+	size_t src_len = strlen(src);
+
+	char* new_mem = malloc(dst_len + src_len + 1);
+
+	memcpy(new_mem,           src, src_len);
+	memcpy(new_mem + src_len, dst, dst_len + 1); // copy \0 too
+
+	return new_mem;
+}
+
+
+/*  */
+char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len)
+{
+	if (!str || !repl_str) {
+		TOU_PRINTD("[tou_sreplace_n] string or replace string NULL\n");
+		return NULL;
+	}
+
+	size_t true_len = strlen(str);
+	size_t repl_len = strlen(repl_str);
+	size_t with_len = strlen(with_str);
+	
+	if (len == 0 || len > true_len)
+		len = true_len;
+
+	char tmp_replaced_ch = '\0';
+	if (len < true_len) {
+		tmp_replaced_ch = str[len];
+		str[len] = '\0';
+	}
+
+	char* search_ptr = str;
+	char* dst = NULL;
+	char* tmp_dst; // used when realloc'ing dst & when iterating last part
+	size_t current_size = 0;
+	const int with_alloc_mult = 4; // prealloc for more than one and shrink in the end?
+	
+	size_t copydiff = 0;
+	char* next_with = NULL;
+
+	while ((next_with = tou_find_string_start(search_ptr, repl_str)) != NULL)
+	{
+		copydiff = next_with - search_ptr;
+
+		if ((tmp_dst = realloc(dst, current_size + copydiff + with_len*with_alloc_mult + 1)) == NULL) {
+			TOU_PRINTD("[tou_sreplace_n] realloc failed (%zu bytes)\n", current_size + copydiff + with_len*with_alloc_mult + 1);
+			if (dst != NULL) // Would be NULL if this was the first replace
+				*(dst + current_size) = '\0'; // needed?
+			break;
+		}
+		dst = tmp_dst;
+
+		memcpy(dst + current_size,            search_ptr, copydiff);
+		memcpy(dst + current_size + copydiff, with_str,   with_len);
+		// *(dst + current_size + copydiff + with_len) = '\0';
+		
+		current_size += copydiff + with_len;
+		search_ptr   += copydiff + repl_len;
+	}
+
+	// Restore replaced char if it was needed
+	if (tmp_replaced_ch != '\0')
+		str[len] = tmp_replaced_ch;
+
+	// Calc size of last one + remainder of source
+	size_t rest = strlen(search_ptr); // last part + non-searched remainder since replaced char was returned to place
+	if ((tmp_dst = realloc(dst, current_size + rest + 1)) == NULL) {
+		TOU_PRINTD("[tou_sreplace_n] last part realloc failed (%zu)\n", current_size + rest + 1);
+		return dst;
+	}
+	dst = tmp_dst;
+
+	// Copy the remaining unmodified part from search_ptr to (tmp_)dst
+	tmp_dst = dst + current_size;
+	while (*search_ptr)
+		*(tmp_dst++) = *(search_ptr++);
+	*tmp_dst = '\0';
+	current_size += rest + 1;
+
+	// Resize to fit if larger (?)
+	tmp_dst = realloc(dst, current_size);
+	if (tmp_dst)
+		return tmp_dst;
+	return dst;
+}
+
+
+/*  */
+char* tou_sreplace(char* str, char* repl_str, char* new_str)
+{
+	return tou_sreplace_n(str, repl_str, new_str, 0);
+}
+
+
+/*  */
 size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* userdata)
 {
 	// Clamp blocksize to TOU_DEFAULT_BLOCKSIZE if not in following range:
 	if (blocksize < 1 || blocksize > 0xFFFFFF) {
 		blocksize = TOU_DEFAULT_BLOCKSIZE;
-		//TOU_DEBUG( printf(TOU_DEBUG_PREFIX "[tou_read_fp_in_blocks] clamping blocksize to " TOU_MSTR(TOU_DEFAULT_BLOCKSIZE)"\n") );
 		TOU_PRINTD("[tou_read_fp_in_blocks] clamping blocksize to "TOU_MSTR(TOU_DEFAULT_BLOCKSIZE)"\n");
 	}
 
@@ -1185,44 +1435,34 @@ size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* use
 		}
 	}
 
-	// if (read_len)
-	// 	*read_len = bytes_read;
 	return bytes_read;
 }
 
-/** @brief Struct containing char** representing ptr to buffer and size_t representing current size of buffer */
-typedef struct {
-	char* buffer;
-	size_t size;
-} tou_block_store_struct;
 
 /*  */
 void* tou_block_store_cb(void* blockdata, void* len, void* userdata)
 {
-	// - blockdata [in] Pointer to the beginning of new data
-	// - len [in] Amount of bytes actually read
-	// - userdata [in] User data provided
-
 	char* block = (char*) blockdata;
 	size_t size = (size_t) len;
 	tou_block_store_struct* data = (tou_block_store_struct*) userdata;
 
-	// TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s\n===== (%zu)\n", size, block, size);
+	TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s\n===== (%zu)\n", size, block, size);
 
 	if (size > 0) {
-		char* new_buffer = realloc(data->buffer, data->size + size);
+		char* new_buffer = realloc(data->buffer, data->size + size + 1); // accomodate \0
 		if (!new_buffer){ 
 			TOU_PRINTD("[tou_block_store_cb] cannot realloc memory\n");
 			// return (void*) TOU_BREAK;
 		} else {
-			strcpy(new_buffer + data->size, block);
+			memcpy(new_buffer + data->size, block, size);
+			*(new_buffer + data->size + size) = '\0';
 			data->buffer = new_buffer;
 			data->size += size;
 			TOU_PRINTD("[tou_block_store_cb] appended block {size=%zu}\n", data->size);
 		}
 	}
 	
-	return (void*) TOU_CONTINUE;
+	return (void*)TOU_CONTINUE;
 }
 
 /*  */
@@ -1243,8 +1483,12 @@ char* tou_read_file(const char* filename, size_t* read_len)
 	tou_block_store_struct tmp = {NULL, 0};
 	tou_read_fp_in_blocks(fp, TOU_DEFAULT_BLOCKSIZE, tou_block_store_cb, &tmp);
 	
-	if (fp != stdin)
+	TOU_PRINTD("[read_file] finished reading blocks.\n");
+
+	if (fp != stdin) {
 		fclose(fp);
+		TOU_PRINTD("[read_file] closed.\n");
+	}
 
 	if (read_len)
 		*read_len = tmp.size;
@@ -1594,8 +1838,8 @@ tou_llist_t** tou_llist_find_key(tou_llist_t** list, void* dat1)
 
 	tou_llist_t** tracker = list;
 	while (*tracker) {
-		if (strcmp((*tracker)->dat1, dat1) == TOU_BREAK) {
-			//!!TOU_PRINTD("[llist_find_key] FOUND %s (%p)\n", (*tracker)->dat1, (*tracker)->dat2);
+		if (strcmp((*tracker)->dat1, dat1) == 0) {
+			TOU_PRINTD("[llist_find_key] FOUND %s (%p) %s\n", (*tracker)->dat1, (*tracker)->dat2, (*tracker)->dat2);
 			return tracker;
 		}
 		tracker = &((*tracker)->prev);
@@ -1915,7 +2159,27 @@ tou_llist_t** tou_ini_get_property(tou_llist_t** inicontents, const char* sectio
 
 
 /*  */
-char* tou_ini_get(tou_llist_t** inicontents, const char* section_name, const char* key)
+tou_llist_t* tou_ini_section(tou_llist_t** inicontents, const char* section_name)
+{
+	tou_llist_t** sect = tou_ini_get_section(inicontents, (void*)section_name);
+	if (sect == NULL)
+		return NULL;
+	return (*sect)->dat2;
+}
+
+
+/*  */
+void* tou_ini_property(tou_llist_t* section, const char* property_name)
+{
+	tou_llist_t** prop = tou_llist_find_key(&section, (void*)property_name);
+	if (prop == NULL)
+		return NULL;
+	return (*prop)->dat2;
+}
+
+
+/*  */
+void* tou_ini_get(tou_llist_t** inicontents, const char* section_name, const char* key)
 {
 	tou_llist_t** prop = tou_ini_get_property(inicontents, section_name, key);
 	TOU_PRINTD("ini_get  prop: %p\n", prop);
@@ -1927,7 +2191,7 @@ char* tou_ini_get(tou_llist_t** inicontents, const char* section_name, const cha
 
 
 /*  */
-char* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value)
+void* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value)
 {
 	if (inicontents == NULL || *inicontents == NULL || section_name == NULL || key == NULL || new_value == NULL) {
 		TOU_PRINTD("[ini_set] received empty params\n");

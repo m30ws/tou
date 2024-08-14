@@ -1777,7 +1777,7 @@ void* tou_block_store_cb(void* blockdata, void* len, void* userdata)
 	size_t size = (size_t) len;
 	tou_block_store_struct* data = (tou_block_store_struct*) userdata;
 
-	TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s (...first %d bytes)\n===== (%zu)\n", /*size*/64, 64, block, size);
+	TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s (...first %d bytes)\n===== (%zu)\n", (size>64)?64:size, block, (size>64)?64:size, size);
 
 	if (size > 0) {
 		char* new_buffer = realloc(data->buffer, data->size + size + 1); // accomodate \0

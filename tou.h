@@ -2,7 +2,7 @@
 	@file tou.h
 	@brief Tou header library
 	@author m30ws
-	@version 1.3 (20240807)
+	@version 1.4 (20240814)
 
 	Git repo: https://github.com/m30ws/tou/
 
@@ -13,7 +13,7 @@
 	- \#define TOU_IMPLEMENTATION
 	
 	Other various defines:
-	- \#define TOU_LLIST_SINGLE_ELEM
+	- \#define TOU_LLIST_SINGLE_ELEM (deprecated)
 	
 	Things:
 	- full linked list impl (todo: improve/cleanup error checking)
@@ -29,7 +29,6 @@
 	- A ton of helper definitions
 */
 
-
 #ifndef __TOU_H_
 #define __TOU_H_
 
@@ -37,17 +36,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 
+/* == Debug options and helpers == */
 /**
 	@addtogroup grp_debug Debug options
 	@{
 */
 
+/** A unique tou.h version identifier */
+#define TOU_GET_VERSION() (20240807)
+
 /**
 	@brief Control library debug output & debug code blocks
 */
 #ifndef TOU_DBG
-#define TOU_DBG 0 
+#define TOU_DBG 0
 #endif
 
 /**
@@ -88,7 +92,6 @@
 
 
 /* == Various definitions == */
-
 /**
 	@addtogroup grp_various Various definitions
 	@{
@@ -129,6 +132,13 @@
 #endif
 
 /**
+	@brief Size of array, should also work with const char* []
+*/
+#ifndef TOU_ARRSIZE
+#define TOU_ARRSIZE(x) (sizeof(x) / sizeof(x[0])) // /sizeof(__typeof__(x[0])))
+#endif
+
+/**
 	@brief Quick and simple random integer
 
 	Outputs values in range from `mn` (inclusive) to `mx` (not inclusive).
@@ -166,11 +176,11 @@ typedef void* (*tou_func2)(void*, void*);
 */
 typedef void* (*tou_func3)(void*, void*, void*);
 
+
 /** @} */
 
 
-/* Llist defs */
-
+/* == Linked list == */
 /**
 	@addtogroup grp_llist Linked list
 	@{
@@ -198,14 +208,19 @@ typedef void* (*tou_func3)(void*, void*, void*);
 	} tou_llist_t;
 #endif
 
+
 /** @} */
+
 
 // ==============================================================
 // ||                        FUNC DECLS                        ||
 // ==============================================================
 
-
 /* == String functions == */
+/**
+	@addtogroup grp_string String operations
+	@{
+*/
 
 /*
  * strlcpy() and strcat() functions were acquired from
@@ -227,11 +242,6 @@ typedef void* (*tou_func3)(void*, void*, void*);
  * 
  * Also see: https://www.millert.dev/papers/strlcpy
  */
-
-/**
-	@addtogroup grp_string String operations
-	@{
-*/
 
 /**
 	@brief Copies string SRC to DST, always places terminator.
@@ -275,6 +285,14 @@ size_t tou_strlcpy(char* dst, const char* src, size_t size);
 size_t tou_strlcat(char* dst, const char* src, size_t size);
 
 /**
+	@brief Same as strlen() but checks for null pointer.
+
+	@param[in] str String, may be NULL
+	@return Length of the string
+*/
+size_t tou_strlen(const char* str);
+
+/**
 	@brief Strdup implementation; returns a malloc'd copy of the string.
 	
 	@param[in] src String to be duplicated
@@ -283,8 +301,8 @@ size_t tou_strlcat(char* dst, const char* src, size_t size);
 char* tou_strdup(const char* src);
 
 /**
-	@brief Returns a newly allocated copy of a string, capped at 'size' length,
-	or NULL if unable to allocate. Appends NUL at the end.
+	@brief Returns a newly allocated copy of a string, capped at 'size' length
+	(not including '\0'), or NULL if unable to allocate. Appends NUL at the end.
 	
 	@param[in] src String to copy from
 	@param[in] size Max copied bytes from string
@@ -375,7 +393,7 @@ char* tou_trim_back_pure(char* str);
 	@param[in,out] str String to convert
 	@return Pointer to the same string
 */
-char* tou_strlower(char* str);
+char* tou_slower(char* str);
 
 /**
 	@brief Converts all characters in `str` to uppercase in-place.
@@ -383,12 +401,13 @@ char* tou_strlower(char* str);
 	@param[in,out] str String to convert
 	@return Pointer to the same string
 */
-char* tou_strupper(char* str);
+char* tou_supper(char* str);
+
 
 /** @} */
 
-/* == File operations == */
 
+/* == File operations == */
 /**
 	@addtogroup grp_file File operations
 	@{
@@ -399,12 +418,15 @@ char* tou_strupper(char* str);
 
 	Automatically allocates memory and returns amount read.
 	Function receives 3 parameters:
-		- data [in] Pointer to new data
-		- len [in] Amount of bytes actually read
-		- userdata [in,out] User data provided
+	- `data` [in] Pointer to new data
+	- `len` [in] Amount of bytes actually read
+	- `userdata` [in,out] User data provided
+
+	Look into this function's source and/or ::tou_block_store_cb and
+	::tou_block_store_struct for more info about using it.
 
 	@param[in] fp FILE* from which data is to be read
-	@param[in] blocksize Size in bytes; set to 0 to use default (TOU_DEFAULT_BLOCKSIZE)
+	@param[in] blocksize Size in bytes; set to 0 to use default (::TOU_DEFAULT_BLOCKSIZE)
 	@param[in] cb Function to call for each block
 	@param[in] userdata Custom data to be passed to function
 	@return Total bytes read
@@ -418,17 +440,23 @@ size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* use
 
 /**
 	@brief Struct containing buffer and count to be used in block-reading
+
+	This struct is automatically instantiated by ::tou_read_file and passed to
+	::tou_read_fp_in_blocks, but may also be used manually for any purpose.
 */
 typedef struct {
-	char* buffer; /**< @brief Buffer to append data to */
-	size_t size; /**< @brief Length of the buffer contents */
+	char* buffer; /**< Buffer to append data to */
+	size_t size; /**< Length of the buffer contents */
 } tou_block_store_struct;
 
 /**
-	@brief Appends the given block to the buffer in `tou_block_store_struct` using realloc().
+	@brief Appends the given block to the buffer in
+	`tou_block_store_struct` through realloc().
 
-	Memory for '\0' at the end will be allocated, but will not be indicated in `.size`
-	parameter.
+	Memory for '\0' at the end will be allocated, but will not be
+	indicated in `.size` parameter. This function is automatically
+	passed to ::tou_read_fp_in_blocks by ::tou_read_file, but may
+	also be used manually for any purpose.
 
 	@param[in] blockdata Pointer to the beginning of new data
 	@param[in] len Amount of bytes actually read
@@ -440,7 +468,7 @@ void* tou_block_store_cb(void* blockdata, void* len, void* userdata);
 /** @} */
 
 /**
-	@brief Reads file in blocks.
+	@brief Reads file from `filename`.
 
 	Automatically allocates memory and optionally
 	returns amount read (may be set to null).
@@ -453,6 +481,10 @@ char* tou_read_file(const char* filename, size_t* read_len);
 
 
 /* == System/IO control == */
+/**
+	@addtogroup grp_file_sysio System/IO control
+	@{
+*/
 
 /**
 	@brief Redirects STDOUT to `/dev/null` (or `NUL:` on Windows)
@@ -472,11 +504,28 @@ int tou_disable_stdout();
 */
 void tou_enable_stdout(int saved_fd);
 
+/**
+	@brief Shorthand for surrounding a piece of code with ::tou_disable_stdout and ::tou_enable_stdout
+*/
+#define TOU_SILENCE( ... ) \
+	_tou_g_saved_stdout = tou_disable_stdout(); \
+	__VA_ARGS__ ; \
+	tou_enable_stdout(_tou_g_saved_stdout);
+
+/**
+	Filedescriptor handle local to this compilation unit used with ::TOU_SILENCE.
+	Since it isn't surrounded by `#ifdef TOU_IMPLEMENTATION` it'll be declared each time you \#include the header.
+*/
+int _tou_g_saved_stdout;
+
+
+/** @} */
+
+
 /** @} */
 
 
 /* == Linked list == */
-
 /**
 	@addtogroup grp_llist Linked list
 	@{
@@ -717,11 +766,11 @@ void** tou_llist_gather_dat1(tou_llist_t* list, size_t* len);
 */
 void** tou_llist_gather_dat2(tou_llist_t* list, size_t* len);
 
+
 /** @} */
 
 
 /* == Strings higher level == */
-
 /**
 	@addtogroup grp_string 
 	@{
@@ -749,11 +798,85 @@ char* tou_replace_ch(char* ss, char oldch, char newch);
 /**
 	@brief Finds start of substring(keyword) in the given char*.
 	
-	@param[in] ptr Source string
+	@param[in] str Source string
 	@param[in] kwd Which keyword to search for
 	@return Pointer to the beginning of the keyword in the text or NULL
 */
-char* tou_find_string_start(char* ptr, char* kwd);
+char* tou_sfind(const char* str, const char* kwd);
+
+/**
+	@brief Finds start of substring(keyword) in the given char*, looking
+	at a max of `maxlen` characters.
+	
+	@param[in] str Source string
+	@param[in] kwd Which keyword to search for
+	@param[in] maxlen Looks only at the first `maxlen` characters
+	@return Pointer to the beginning of the keyword in the text or NULL
+*/
+char* tou_sfind_n(const char* str, const char* kwd, size_t maxlen);
+
+/**
+	@brief Like ::tou_sfind but searches for more than one string at a time.
+
+	`found_idx` may be NULL if you don't need to know which keyword was found.
+
+	@param[in] str String to search in
+	@param[in] kwds Array of char* keywords to search for
+	@param[in] n_kwds Count of keywords to search for in `kwds`
+	@param[out] found_idx Which of the strings in `kwds` was found
+	@return Pointer to the first found string
+*/
+char* tou_sfind_multiple(const char* str, const char** kwds, int n_kwds, int* found_idx);
+
+/**
+	@brief Like ::tou_sfind_n but searches for more than one string at a time.
+
+	`found_idx` may be NULL if you don't need to know which keyword was found.
+
+	@param[in] str String to search in
+	@param[in] kwds Array of char* keywords to search for
+	@param[in] n_kwds Count of keywords to search for in `kwds`
+	@param[out] found_idx Which of the strings in `kwds` was found
+	@param[in] maxlen Max characters from `str` to consider
+	@return Pointer to the first found string
+*/
+char* tou_sfind_multiple_n(const char* str, const char** kwds, int n_kwds, int* found_idx, size_t maxlen);
+
+/**
+	@brief Iteratively finds occurences of strings in `kwds`
+			and calls user function for each one.
+
+	The callback receives the following args:
+	- `found` [in] Pointer to the keyword found in `str`
+	- `kwd` [in] Pointer to that keyword in `kwds`
+	- `userdata` [in,out] User data passed at the beginning
+
+	@param[in] src String to search in
+	@param[in] kwds Array of char* keywords to search for
+	@param[in] n_kwds Count of keywords to search for in `kwds`
+	@param[in] cb User callback called for each found token
+	@param[in] userdata User data passed to callback
+*/
+void tou_sfind_iter_multiple(const char* src, const char* kwds[], int n_kwds, tou_func3 cb, void* userdata);
+
+/**
+	@brief Iteratively finds occurences of strings in `kwds`
+			and calls user function for each one, up to `maxlen`
+			characters in `src`.
+
+	The callback receives the following args:
+	- `found` [in] Pointer to the keyword found in `str`
+	- `kwd` [in] Pointer to that keyword in `kwds`
+	- `userdata` [in,out] User data passed at the beginning
+
+	@param[in] src String to search in
+	@param[in] kwds Array of char* keywords to search for
+	@param[in] n_kwds Count of keywords to search for in `kwds`
+	@param[in] cb User callback called for each found token
+	@param[in] userdata User data passed to callback
+	@param[in] maxlen Max characters from `str` to consider
+*/
+void tou_sfind_iter_multiple_n(const char* src, const char* kwds[], int n_kwds, tou_func3 cb, void* userdata, size_t maxlen);
 
 /**
 	@brief Splits string using a delimiter that may be longer than one character.
@@ -762,7 +885,7 @@ char* tou_find_string_start(char* ptr, char* kwd);
 	@param[in] delim Delimiter string
 	@return Linked list containing tokens
 */
-tou_llist_t* tou_split(char* str, char* delim);
+tou_llist_t* tou_split(char* str, const char* delim);
 
 /**
 	@brief (Re)allocates enough memory for src and appends it to dst
@@ -789,25 +912,6 @@ char* tou_sappend(char* dst, char* src);
 char* tou_sprepend(char* dst, char* src);
 
 /**
- * @brief Replaces string `repl_str` with `with_str` in the `str`,
- *        testing `str` up to the character `len`.
- * 
- * When all tokens that can be found are replaces, the remainder of the `str`
- * (until '\0' is found) is copied to the end of the buffer.
- * If parameter `len` is set to 0, the whole string will be taken into consideration.
- * Cutting off is performed by temporarily modifying original string and placing '\0' at that position,
- * which is removed right after no more tokens to be replaced can be found.
- * 
- * @param[in,out] str String to be searched for tokens
- * @param[in] repl_str String to replace
- * @param[in] with_str String to replace with
- * @param[in] len Max length of the original string to consider
- * @return Pointer to the newly allocated replaced string
- * 
- */
-char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len);
-
-/**
  * @brief Helper for `tou_sreplace` that takes the whole string into consideration.
  * 
  * @param[in,out] str String to be searched for tokens
@@ -816,13 +920,50 @@ char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len);
  * @return Pointer to the newly allocated replaced string
  *
  */
-char* tou_sreplace(char* str, char* repl_str, char* new_str);
+char* tou_sreplace(char* str, char* repl_str, char* with_str);
+
+/**
+ * @brief Replaces string `repl_str` with `with_str` in the `str`,
+ *        testing `str` up to the character `*len_ptr`.
+ * 
+ * When all tokens that can be found are replaces, the remainder of the `str`
+ * (until '\0' is found) is copied to the end of the buffer.
+ * If parameter `len_ptr` is passed as NULL or set to 0, the whole string will be taken into
+ * consideration using strlen. If given, it will also be set to new length after replacing.
+ * Cutting off at length is performed by temporarily modifying original string and placing
+ * '\0' at that position, which is removed right after no more tokens to be replaced can be found.
+ * 
+ * [!] If you use this function in a loop and keep reassigning new pointers to it
+ *     don't forget the original pointer will be invalid at the end! (either 
+ *     reassign the new pointer to it or don't use it after anymore.)
+ * 
+ * @param[in,out] str String to be searched for tokens
+ * @param[in] repl_str String to replace
+ * @param[in] with_str String to replace with
+ * @param[in,out] len_ptr Pointer to the length variable
+ * @return Pointer to the newly allocated replaced string
+ * 
+ */
+char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t* len_ptr);
+
+/**
+	@brief Checks if length of given string element (.dat1/2)
+	       is zero after trimming it from the start.
+	
+	@param[in] elem llist element to check
+	@param[in] dat One of: `dat1`, `dat2`
+	@return Positive if dat1/2 is empty, 0 otherwise
+*/
+#define tou_sisempty(elem, dat) \
+	((elem) == NULL /* wanted to do without this one but i can already see segfaults happening without it */ || \
+	 (elem)->dat == NULL || \
+	 tou_strlen(tou_trim_front_pure((elem)->dat)) == 0)
+
 
 /** @} */
 
 
 /* == INI parser == */
-
 /**
 	@addtogroup grp_ini INI operations
 	@{
@@ -836,11 +977,15 @@ char* tou_sreplace(char* str, char* repl_str, char* new_str);
 	Specifying the same section name more than once is not supported (that
 	may change in the future where the definitions would merge and "flatten"
 	into one combined section).
-	When specifying properties both keys and values may have whitespaces in
-	them but not at the start and at the end (of course that also means that
-	such keys will be sensitive to those whitespaces when using the data).
+	
 	Whitespaces may be added between sections, properties and section name
-	brackets for better readability.
+	brackets for better readability. When specifying properties both keys
+	and values may have *some* whitespaces in them.
+	However, all whitespaces at the beginning and the end of the *key* will be
+	removed, as well as all whitespaces at the end of the *value*. If the value
+	starts with a whitespace, only that single whitespace will be removed.
+	Keep in mind that keys having whitespaces inside of them will be sensitive
+	to them when reading the data.
 
 	Structured data is constructed as two layers of llists where the primary list
 	that gets returned from function represents sections in .INI file where the
@@ -987,6 +1132,50 @@ int tou_ini_save_fp_xml(tou_llist_t* inicontents, FILE* fp);
 /** @} */
 
 
+/* == Parsers == */
+/**
+	@addtogroup grp_parsers_converters Parsers & Converters
+	@{
+*/
+
+/**
+	@brief Parses "parameter string" and returns a llist of key-value pairs,
+		looking at the whole string (strlen will be used)
+
+	Extra whitespaces are ignored and pairs may be key-only (values may be empty);
+	Example:
+		` 5 adjust abc=   def     123=456 	`
+	Is returned as llist where elements are:
+		`{{"5", NULL}, {"adjust", NULL}, {"abc", "def"}, {"123", "456"}}`
+
+	@param[in] str Pointer to parse
+	@param[in] param_sep String used to split pairs
+	@param[in] keyval_sep String used to split key-value pairs
+	@return Pairs in llist
+*/
+tou_llist_t* tou_paramparse(char* str, const char* param_sep, const char* keyval_sep);
+
+/**
+	@brief Parses "parameter string" and returns a llist of key-value pairs
+
+	Extra whitespaces are ignored and pairs may be key-only (values may be empty);
+	Example:
+		` 5 adjust abc=   def     123=456 	`
+	Is returned as llist where elements are:
+		`{{"5", NULL}, {"adjust", NULL}, {"abc", "def"}, {"123", "456"}}`
+
+	@param[in] str Pointer to parse
+	@param[in] param_sep String used to split pairs
+	@param[in] keyval_sep String used to split key-value pairs
+	@param[in] maxlen Looks only at the first `maxlen` characters in str
+	@return Pairs in llist
+*/
+tou_llist_t* tou_paramparse_n(char* str, const char* param_sep, const char* keyval_sep, size_t maxlen);
+
+
+/** @} */
+
+
 #endif // __TOU_H_
 
 
@@ -1041,6 +1230,14 @@ size_t tou_strlcat(char* dst, const char* src, size_t size)
 
 
 /*  */
+size_t tou_strlen(const char* str)
+{
+	if (!str) return 0;
+	return strlen(str);
+}
+
+
+/*  */
 char* tou_strdup(const char* src)
 {
 	size_t src_len = strlen(src);
@@ -1066,7 +1263,7 @@ char* tou_strndup(const char* src, size_t size)
 		if ((copy = malloc(copy_len + 1)) == NULL)
 			return NULL;
 		// tou_strlcpy(copy, src, copy_len + 1);
-		memcpy(copy, src, src_len + 1);
+		memcpy(copy, src, copy_len + 1);
 	}
 	return copy;
 }
@@ -1181,7 +1378,7 @@ char* tou_trim_back_pure(char* str)
 
 
 /*  */
-char* tou_strlower(char* str)
+char* tou_slower(char* str)
 {
 	if (!str)
 		return NULL;
@@ -1192,7 +1389,7 @@ char* tou_strlower(char* str)
 }
 
 /*  */
-char* tou_strupper(char* str)
+char* tou_supper(char* str)
 {
 	if (!str)
 		return NULL;
@@ -1218,34 +1415,155 @@ char* tou_replace_ch(char* ss, char oldch, char newch)
 
 
 /*  */
-char* tou_find_string_start(char* ptr, char* kwd)
+char* tou_sfind(const char* src, const char* kwd)
 {
-	int kwd_len = strlen(kwd);
-	char* kwd_ptr = kwd;
-	char* ret_ptr = NULL;
+	return tou_sfind_n(src, kwd, strlen(src));
+}
+
+
+/*  */
+char* tou_sfind_n(const char* src, const char* kwd, size_t maxlen)
+{
+	if (src == NULL)
+		return NULL;
+
+	const char* ret_ptr = NULL;
+	const int kwd_len = strlen(kwd);
+	const char* kwd_ptr = kwd;
+
+	if (kwd_len > maxlen)
+		return NULL;
 	
-	while (*ptr) {
+	while (maxlen + 1 > 0 ){//&& *src) {
 		if (*kwd_ptr == '\0') {
 			// only time it should be is when kwd is found
-			ret_ptr = ptr - kwd_len;
+			ret_ptr = src - kwd_len;
 			break;
 		}
 
-		if (*kwd_ptr == *ptr) {
+		if (*src == '\0')
+			break;
+
+		if (*kwd_ptr == *src) {
 			kwd_ptr++;
 		} else {
 			kwd_ptr = kwd;
 		}
 
-		ptr++;
+		src++;
+		maxlen--;
 	}
 
-	return ret_ptr;
+	return (char*)ret_ptr;
 }
 
 
 /*  */
-tou_llist_t* tou_split(char* str, char* delim)
+char* tou_sfind_multiple(const char* str, const char** kwds, int n_kwds, int* found_idx)
+{
+	return tou_sfind_multiple_n(str, kwds, n_kwds, found_idx, ((size_t)-1) - 1);
+}
+
+
+/*  */
+char* tou_sfind_multiple_n(const char* str, const char** kwds, int n_kwds, int* found_idx, size_t maxlen)
+{
+	if (str == NULL || kwds == NULL || n_kwds < 1)
+		return NULL;
+
+	if (maxlen < 1) {
+		if (found_idx) *found_idx = -1;
+		return NULL;
+	}
+
+	int kwd_len[n_kwds];
+	const char* kwd_ptr[n_kwds];
+	const char* ret_ptr = NULL;
+
+	// Kwds which are NULL will not stop function but will be
+	// ignored later in search loop and their kwd_len will be set to 0
+	for (int i = 0; i < n_kwds; i++) {
+		kwd_ptr[i] = kwds[i];
+		kwd_len[i] = tou_strlen(kwds[i]);
+	}
+
+	while (maxlen + 1 > 0 && *str) {
+		for (int i = 0; i < n_kwds; i++) {
+
+			if (kwd_ptr[i] == NULL) // Skip NULL keywords
+				continue;
+			if (*(kwd_ptr[i]) == '\0') {
+				// only time it should be is when that kwd is found
+				ret_ptr = str - kwd_len[i];
+				if (found_idx)
+					*found_idx = i;
+				goto sfindmultiplen_break; // break;
+			}
+
+			if (*(kwd_ptr[i]) == *str) {
+				kwd_ptr[i]++; // this character matched next char in this kwd
+			} else {
+				kwd_ptr[i] = kwds[i]; // reset this kwd tracker
+			}
+
+		}
+
+		str++;
+		maxlen--;
+	}
+sfindmultiplen_break:
+	// Do the check one more time in case matching string is found
+	// at the end of `str` (*str will break before the check has a chance)
+	for (int i = 0; i < n_kwds; i++) {
+		if (*(kwd_ptr[i]) == '\0') {
+			ret_ptr = str - kwd_len[i];
+			if (found_idx)
+				*found_idx = i;
+			break;
+		}
+	}
+	return (char*)ret_ptr;
+}
+
+
+/*  */
+void tou_sfind_iter_multiple(const char* src, const char* kwds[], int n_kwds, tou_func3 cb, void* userdata)
+{
+	tou_sfind_iter_multiple_n(src, kwds, n_kwds, cb, userdata, ((size_t)-1) - 1);
+}
+
+
+/*  */
+void tou_sfind_iter_multiple_n(const char* src, const char* kwds[], int n_kwds, tou_func3 cb, void* userdata, size_t maxlen)
+{
+	char* found = NULL;
+	int found_idx = -1;
+	const char* text_ptr = src;
+	size_t remaining = maxlen - 0;
+
+	while ((found = tou_sfind_multiple_n(text_ptr, kwds, n_kwds, &found_idx, remaining)) != NULL) {
+		// TOU_PRINTD("[iter_find_multiple_n] calling user func with (\"%s\", \"%s\", %p)\n", text_ptr, kwds[found_idx], userdata);
+
+		// Call user func
+		if (cb((void*)found, (void*)kwds[found_idx], userdata) == TOU_BREAK) {
+			TOU_PRINTD("[iter_find_multiple_n] breaking early\n");
+			return;
+		}
+		// Iter continue
+		text_ptr = found + tou_strlen(kwds[found_idx]);
+		remaining -= (text_ptr - src);
+	}
+	// // Calls user func for the remaining part which
+	// // doesn't have kwd in it but with idx will be set to -1
+	// if (text_ptr && *text_ptr) {
+	// 	// TOU_PRINTD("[iter_find_multiple_n] calling user func with (\"%s\", NULL, %p)\n", text_ptr, userdata);
+	// 	cb((void*)text_ptr, NULL, userdata);
+	// }
+}
+
+
+/*  */
+tou_llist_t* tou_split(char* str, const char* delim)
 {
 	if (!str || !delim)
 		return NULL;
@@ -1255,7 +1573,7 @@ tou_llist_t* tou_split(char* str, char* delim)
 	size_t delim_len = strlen(delim);
 	tou_llist_t* list = NULL;
 	char* pos_start = str;
-	char* pos_delim = tou_find_string_start(str, delim);
+	char* pos_delim = tou_sfind(str, delim);
 	
 	while (pos_delim) {
 
@@ -1268,7 +1586,7 @@ tou_llist_t* tou_split(char* str, char* delim)
 
 		// Find next occurence
 		pos_start = pos_delim + delim_len;
-		pos_delim = tou_find_string_start(pos_start/*pos_delim + delim_len*/, delim);
+		pos_delim = tou_sfind(pos_start/*pos_delim + delim_len*/, delim);
 	}
 
 	size_t len = strlen(pos_start);
@@ -1282,7 +1600,7 @@ tou_llist_t* tou_split(char* str, char* delim)
 		tou_llist_append(&list, buf, NULL, 1, 0);
 	}
 
-	return tou_llist_get_tail(list);
+	return list;//tou_llist_get_tail(list);
 }
 
 
@@ -1294,7 +1612,6 @@ char* tou_sappend(char* dst, char* src)
 
 	size_t new_size = dst_len + src_len + 1;
 	dst = realloc(dst, new_size);
-	// tou_strlcat(dst, src, new_size);
 	tou_strlcpy(dst + dst_len, src, new_size);
 
 	return dst;
@@ -1317,7 +1634,14 @@ char* tou_sprepend(char* dst, char* src)
 
 
 /*  */
-char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len)
+char* tou_sreplace(char* str, char* repl_str, char* with_str)
+{
+	return tou_sreplace_n(str, repl_str, with_str, NULL);
+}
+
+
+/*  */
+char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t* len_ptr)
 {
 	if (!str || !repl_str) {
 		TOU_PRINTD("[tou_sreplace_n] string or replace string NULL\n");
@@ -1328,6 +1652,10 @@ char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len)
 	size_t repl_len = strlen(repl_str);
 	size_t with_len = strlen(with_str);
 	
+	size_t len = 0;
+	if (len_ptr != NULL) {
+		len = *len_ptr;
+	}
 	if (len == 0 || len > true_len)
 		len = true_len;
 
@@ -1346,7 +1674,7 @@ char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len)
 	size_t copydiff = 0;
 	char* next_with = NULL;
 
-	while ((next_with = tou_find_string_start(search_ptr, repl_str)) != NULL)
+	while ((next_with = tou_sfind(search_ptr, repl_str)) != NULL)
 	{
 		copydiff = next_with - search_ptr;
 
@@ -1366,10 +1694,6 @@ char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len)
 		search_ptr   += copydiff + repl_len;
 	}
 
-	// Restore replaced char if it was needed
-	if (tmp_replaced_ch != '\0')
-		str[len] = tmp_replaced_ch;
-
 	// Calc size of last one + remainder of source
 	size_t rest = strlen(search_ptr); // last part + non-searched remainder since replaced char was returned to place
 	if ((tmp_dst = realloc(dst, current_size + rest + 1)) == NULL) {
@@ -1383,20 +1707,27 @@ char* tou_sreplace_n(char* str, char* repl_str, char* with_str, size_t len)
 	while (*search_ptr)
 		*(tmp_dst++) = *(search_ptr++);
 	*tmp_dst = '\0';
-	current_size += rest + 1;
+	current_size += rest;
+
+	// Restore replaced char if it was needed
+	if (tmp_replaced_ch != '\0')
+		str[len] = tmp_replaced_ch;
 
 	// Resize to fit if larger (?)
-	tmp_dst = realloc(dst, current_size);
-	if (tmp_dst)
+	tmp_dst = realloc(dst, current_size + 1);
+	if (tmp_dst) {
+		// realloc succeded
+		if (len_ptr) {
+			*len_ptr = current_size;
+		}
 		return tmp_dst;
+	}
+
+	// realloc failed
+	if (len_ptr) {
+		*len_ptr = strlen(dst);
+	}
 	return dst;
-}
-
-
-/*  */
-char* tou_sreplace(char* str, char* repl_str, char* new_str)
-{
-	return tou_sreplace_n(str, repl_str, new_str, 0);
 }
 
 
@@ -1446,7 +1777,7 @@ void* tou_block_store_cb(void* blockdata, void* len, void* userdata)
 	size_t size = (size_t) len;
 	tou_block_store_struct* data = (tou_block_store_struct*) userdata;
 
-	TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s\n===== (%zu)\n", size, block, size);
+	TOU_PRINTD("\n[tou_block_store_cb] Block\n=====\n%.*s (...first %d bytes)\n===== (%zu)\n", /*size*/64, 64, block, size);
 
 	if (size > 0) {
 		char* new_buffer = realloc(data->buffer, data->size + size + 1); // accomodate \0
@@ -1498,26 +1829,10 @@ char* tou_read_file(const char* filename, size_t* read_len)
 
 
 /*  */
-void tou_enable_stdout(int saved_fd)
-{
-	fflush(stdout);
-
-#ifdef _WIN32
-	// #pragma message "bindobs"
-	_dup2(saved_fd, 1);
-	_flushall();
-
-#elif __linux__
-	// #pragma message "bibux"
-	dup2(saved_fd, 1);
-	close(saved_fd);
-#endif
-}
-
-
-/*  */
 int tou_disable_stdout()
 {
+	TOU_PRINTD("[Disabling stdout.]\n");
+	
 	fflush(stdout);
 	int stdout_fd;
 
@@ -1537,6 +1852,26 @@ int tou_disable_stdout()
 #endif
 	
 	return stdout_fd;
+}
+
+
+/*  */
+void tou_enable_stdout(int saved_fd)
+{
+	fflush(stdout);
+
+#ifdef _WIN32
+	// #pragma message "bindobs"
+	_dup2(saved_fd, 1);
+	_flushall();
+
+#elif __linux__
+	// #pragma message "bibux"
+	dup2(saved_fd, 1);
+	close(saved_fd);
+#endif
+
+	TOU_PRINTD("[Enabled stdout.]\n");
 }
 
 
@@ -2018,11 +2353,11 @@ tou_llist_t* tou_ini_parse_fp(FILE* fp)
 		char* prop;
 		
 		// Test if either delimiter exists in line
-		prop = tou_find_string_start(line, " = ");
+		prop = tou_sfind(line, " = ");
 		prop_len = 3;
 
 		if (prop == NULL) {
-			prop = tou_find_string_start(line, "=");
+			prop = tou_sfind(line, "=");
 			prop_len = 1;
 
 			// Invalid line
@@ -2047,6 +2382,10 @@ tou_llist_t* tou_ini_parse_fp(FILE* fp)
 		*prop = '\0';
 		char* key = line;
 		char* val = prop + prop_len;
+
+		if (TOU_IS_BLANK(*val)) // Remove leading (only 1) whitespace
+			val++;
+		tou_trim_back(&key);
 		tou_trim_back(&val);
 
 		TOU_PRINTD("  Key: %s, Val: %s\n", key, val);
@@ -2371,6 +2710,76 @@ int tou_ini_save_fp_xml(tou_llist_t* inicontents, FILE* fp)
 	fprintf(fp, "\n</%s>", root_tag);
 
 	return 0;
+}
+
+
+/*  */
+tou_llist_t* tou_paramparse(char* str, const char* param_sep, const char* keyval_sep)
+{
+	return tou_paramparse_n(str, param_sep, keyval_sep, 0);
+}
+
+
+/*  */
+tou_llist_t* tou_paramparse_n(char* str, const char* param_sep, const char* keyval_sep, size_t maxlen)
+{
+	size_t psep_len = strlen(param_sep);
+	size_t kvsep_len = strlen(keyval_sep);
+
+	if (maxlen == 0)
+		maxlen = strlen(str);
+
+	// save char to restore it later
+	char saved = str[maxlen];
+	str[maxlen] = '\0';
+	
+	// parse
+	tou_llist_t* params = tou_split(str, param_sep);
+	tou_llist_t* ret = params;
+
+	while (params) {
+		bool dont = false;
+		char* trimmed_key = tou_trim_front_pure(params->dat1);
+
+		if (!tou_sisempty(params, dat1)) { // in case split() inserted empty "" element
+			if (trimmed_key != params->dat1) {
+				memmove(params->dat1, trimmed_key, strlen(trimmed_key) + 1); // move trimmed key to front
+			}
+			
+			char* sep = tou_sfind(params->dat1, keyval_sep);
+			if (sep) {
+				*sep = '\0'; // cuts off key name in dat1
+				params->dat2 = sep + kvsep_len; // assign val to dat2
+
+				char* trimmed_val = tou_trim_front_pure(params->dat2);
+				if (trimmed_val != params->dat2) {
+					memmove(params->dat2, trimmed_val, strlen(trimmed_val) + 1); // move trimmed val to front
+				}
+
+			} else {
+				params->dat2 = NULL;
+			}
+
+		} else {
+			// remove this empty element
+			tou_llist_pop(params);
+			char prev_was_null = (params->prev == NULL);
+			tou_llist_t* relink = (params->prev) ? params->prev : params->next;
+			tou_llist_free_element(params);
+			params = relink;
+
+			if (prev_was_null)
+				break;
+
+			dont = true; // don't process params->prev as usual since we just adjusted list
+		}
+		if (!dont) params = params->prev;
+	}
+
+	// restore char
+	str[maxlen] = saved;
+
+	return tou_llist_get_head(params);
 }
 
 

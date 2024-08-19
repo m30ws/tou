@@ -4,7 +4,7 @@ DOXYBIN := "e:/doxygen/doxygen.exe"
 
 # Build srcs
 build:
-	gcc {{SRC}} -o {{BIN}} -std=c11 #-Wall
+	gcc {{SRC}} -o {{BIN}} -std=c11 -O2 # -ggdb #-Wall
 
 # Run bin
 run:
@@ -15,7 +15,7 @@ rebuild: build run
 
 # Run gcc with -E (preprocess only)
 preproc:
-	gcc {{SRC}} -o {{BIN}} -std=c11 -E
+	gcc {{SRC}} -o {{BIN}} -std=c11 -O0 -E
 
 # Regenerate documentation
 doxy:

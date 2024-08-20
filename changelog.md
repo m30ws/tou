@@ -21,7 +21,7 @@ v1.4 (20240814)
 ===
 - fixed strndup length bug
 - forgot to trim_back key while parsing .ini
-- string-separated parameter parser (paramparse[_n])
+- string-separated parameter parser (`paramparse[_n]`)
 - from now on renamed all string functions from `tou_str#` to `tou_s#`, except functions which correspond to standard library ones
 - tou.h version string (`TOU_GET_VERSION`)
 - more helper macros (`SILENCE`, `ARR_SIZE`)
@@ -54,7 +54,13 @@ v1.5 (20240819)
 - each key and value in paramparse is now allocated separately
 - added simple params printing (`tou_paramprint`)
 
-- INI files can now be loaded from memory buffer using `ini_parse_buffer` (supports \n and \r\n)
+- INI files can now be loaded from memory buffer using `ini_parse_buffer` (supports \\n and \\r\\n)
 - added tou_queue and tou_stack structures
 
 - updated and improved example file
+
+v1.5.1 (20240820)
+===
+- surrounded lib with `extern "C"`
+- `ini_set` can now be also be used to create empty sections
+  - now returns a pointer to the property (key & value) object (or the section object) instead of just value which was just stored

@@ -4,7 +4,7 @@ DOXYBIN := "e:/doxygen/doxygen.exe"
 
 # Build srcs
 build:
-	gcc {{SRC}} -o {{BIN}} -std=c11 -O2 # -ggdb #-Wall
+	gcc {{SRC}} -o {{BIN}} -std=c99 -O2 # -ggdb #-Wall
 
 # Run bin
 run:

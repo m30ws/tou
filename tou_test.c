@@ -62,6 +62,11 @@ void* cb_ini2(void* ptr, void* userdata)
 
 int main(int argc, char const* argv[])
 {
+// We will set -Wint-conversion to ignored for the purposes of this example
+// Re-enable it to see what we're skipping
+#pragma GCC diagnostic ignored "-Wint-conversion"
+
+
 	////////////////////
 	// File read test //
 	////////////////////
@@ -427,9 +432,17 @@ printf("\n");
 	free(newini);
 
 // Load .INI from FILE* //
-	printf("\n=== Load using ini_parse_fp:\n");
+	tou_llist_t* inicontents;
+
+	printf("\n=== Load by combining ini_parse_buffer with read_file:\n");
+	inicontents = tou_ini_parse_buffer(tou_read_file("testini.ini", NULL));
+	printf("\n=== Printing parsed contents:\n");
+	tou_ini_print(inicontents);
+	tou_ini_destroy(inicontents);
+
+	printf("\n=== Or, load using ini_parse_fp:\n");
 	FILE* fp = fopen("testini.ini", "r");
-	tou_llist_t* inicontents = tou_ini_parse_fp(fp);
+	inicontents = tou_ini_parse_fp(fp);
 	fclose(fp);
 
 	printf("\n=== Printing parsed contents:\n");
@@ -472,8 +485,8 @@ printf("\n");
 		prop->dat1, prop->dat2);
 	*/
 
-	printf("\n=== Updating using ini_set [first] name = Giuseppe :: returns '%s'\n",
-		(char*)tou_ini_set(&inicontents, "first", "name", "Giuseppe") );
+	printf("\n=== Updating using ini_set [first] name = Giuseppe :: returns value '%s'\n",
+		(char*)tou_ini_set(&inicontents, "first", "name", "Giuseppe")->dat2 );
 	printf("\n=== Reading the same property reference ([first] name) after updating with ini_set :: %s = %s\n",
 		(char*)prop->dat1, (char*)prop->dat2);
 

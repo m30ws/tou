@@ -2,7 +2,7 @@
 	@file tou.h
 	@brief Tou header library
 	@author m30ws
-	@version 1.5 (20240819)
+	@version 1.5.1 (20240820)
 
 	Git repo: https://github.com/m30ws/tou/
 
@@ -45,7 +45,7 @@
 */
 
 /** A unique tou.h version identifier */
-#define TOU_GET_VERSION() (20240819L)
+#define TOU_GET_VERSION() (20240820L)
 
 /**
 	@brief Control library debug output & debug code blocks
@@ -218,6 +218,10 @@ typedef struct tou_llist tou_llist_elem;
 // ==============================================================
 // ||                        FUNC DECLS                        ||
 // ==============================================================
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* == String functions == */
 /**
@@ -770,7 +774,7 @@ int _tou_g_saved_stdout;
 	easier to extend in the future if a need for such initializer arises.
 */
 #ifndef tou_llist_new
-#define tou_llist_new(...) ((TOU_DBG ? fprintf(stdout,TOU_DEBUG_PREFIX"Creating new llist :: NULL\n") : (void)0) , NULL)
+#define tou_llist_new(...) ((TOU_DBG ? (fprintf(stdout,TOU_DEBUG_PREFIX"Creating new llist :: NULL\n"), (void)0) : (void)0) , NULL)
 #endif
 
 /* */
@@ -1117,14 +1121,14 @@ void** tou_llist_gather_dat2(tou_llist_t* list, size_t* len);
 #ifndef tou_llist_print
 #ifndef TOU_LLIST_SINGLE_ELEM
 
-	#define tou_llist_print(llist, dat1_spec, dat2_spec, ...)                      \
-	{                                                                              \
-		tou_llist_t* copy = tou_llist_get_newest(llist);                           \
-		printf("List contents: (%d)\n", tou_llist_len(copy));                      \
-		while (copy) {                                                             \
-			printf("  |\n  "dat1_spec" :: "dat2_spec"\n", copy->dat1, copy->dat2); \
-			copy = tou_llist_get_older(copy);                                      \
-		}                                                                          \
+	#define tou_llist_print(llist, dat1_spec, dat2_spec, ...)                          \
+	{                                                                                  \
+		tou_llist_t* copy = tou_llist_get_newest(llist);                               \
+		printf("List contents: (%d)\n", tou_llist_len(copy));                          \
+		while (copy) {                                                                 \
+			printf("  |\n  " dat1_spec " :: " dat2_spec "\n", copy->dat1, copy->dat2); \
+			copy = tou_llist_get_older(copy);                                          \
+		}                                                                              \
 	} (void)0
 
 #else
@@ -1134,7 +1138,7 @@ void** tou_llist_gather_dat2(tou_llist_t* list, size_t* len);
 		tou_llist_t* copy = tou_llist_get_newest(llist);      \
 		printf("List contents: (%d)\n", tou_llist_len(copy)); \
 		while (copy) {                                        \
-			printf("  |\n  "dat1_spec"\n", copy->dat1);       \
+			printf("  |\n  " dat1_spec "\n", copy->dat1);     \
 			copy = tou_llist_get_older(copy);                 \
 		}                                                     \
 	} (void)0
@@ -1437,16 +1441,25 @@ tou_llist_t* tou_ini_get_property(tou_llist_t* inicontents, const char* section_
 void* tou_ini_get(tou_llist_t* inicontents, const char* section_name, const char* key);
 
 /**
-	@brief Sets the contents of 'key' under the given 'section_name'
+	@brief Sets the contents of `key` under the given `section_name`
 	to the specified value, reallocating memory if necessary.
+
+	Returns either pointer to the property (key & value) object that was just stored,
+	the section name if just a new section was stored, or NULL on error;
+
+	Section name must always be present, unlike key and value parameters which may be NULL.
+	If key is NULL or empty(""), only the new section will be created. If the section already
+	exists this is a no-op.
+	If both section name and key are present, value may also be "" or NULL
+	which will both result in being stored as an empty value ("") in the structure.
 
 	@param[in,out] inicontents Pointer to the parsed .INI structure
 	@param[in] section_name 
 	@param[in] key 
 	@param[in] new_value 
-	@return Pointer to the new value that was stored in struct, or NULL
+	@return Pointer to the property object, section object, or NULL
 */
-void* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value);
+tou_llist_t* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value);
 
 /**
 	@brief Return a pointer to the llist entry of the matching section, or NULL.
@@ -1578,6 +1591,10 @@ void tou_paramprint(tou_llist_t* params);
 
 /** @} */
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __TOU_H_
 
@@ -1956,7 +1973,7 @@ void tou_sfind_iter_multiple_n(const char* src, const char* kwds[], int n_kwds, 
 		// TOU_PRINTD("[iter_find_multiple_n] calling user func with (\"%s\", \"%s\", %p)\n", text_ptr, kwds[found_idx], userdata);
 
 		// Call user func
-		if (cb((void*)found, (void*)kwds[found_idx], userdata) == TOU_BREAK) {
+		if ((ssize_t)cb((void*)found, (void*)kwds[found_idx], userdata) == (ssize_t)TOU_BREAK) {
 			TOU_PRINTD("[iter_find_multiple_n] breaking early\n");
 			return;
 		}
@@ -2145,7 +2162,7 @@ size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* use
 	// Clamp blocksize to TOU_DEFAULT_BLOCKSIZE if not in following range:
 	if (blocksize < 1 || blocksize > 0xFFFFFF) {
 		blocksize = TOU_DEFAULT_BLOCKSIZE;
-		TOU_PRINTD("[tou_read_fp_in_blocks] clamping blocksize to "TOU_MSTR(TOU_DEFAULT_BLOCKSIZE)"\n");
+		TOU_PRINTD("[tou_read_fp_in_blocks] clamping blocksize to " TOU_MSTR(TOU_DEFAULT_BLOCKSIZE) "\n");
 	}
 
 	size_t curr_bufsize = 0;
@@ -2166,7 +2183,7 @@ size_t tou_read_fp_in_blocks(FILE* fp, size_t blocksize, tou_func3 cb, void* use
 
 		// Do the useful things
 		if (cb) {
-			if (cb(blockbuf, (void*) cnt, userdata) == TOU_BREAK) {
+			if ((ssize_t)cb(blockbuf, (void*) cnt, userdata) == (ssize_t)TOU_BREAK) {
 				// User stopped iteration
 				TOU_PRINTD("[tou_read_fp_in_blocks] iteration aborted.\n");
 				break;
@@ -3042,11 +3059,12 @@ int tou_ini_parse_line(tou_llist_t** inicontents, char* line)
 		}
 
 		// Append section
-		tou_llist_append(inicontents,
-			tou_strdup(line), NULL,
-			1, 0);
+		tou_ini_set(inicontents, line, NULL, NULL);
+		// tou_llist_append(inicontents,
+		// 	tou_strdup(line), NULL,
+		// 	1, 0);
 
-		TOU_PRINTD("Appended section: %s\n", (*inicontents)->dat1);
+		TOU_PRINTD("[ini_parse_line] appended section: %s\n", (*inicontents)->dat1);
 		return TOU_CONTINUE;
 	}
 
@@ -3071,6 +3089,7 @@ int tou_ini_parse_line(tou_llist_t** inicontents, char* line)
 
 	// Property encountered before any section declaration
 	if (*inicontents == NULL) {
+		TOU_PRINTD("[ini_parse_line] property encountered before any section declaration\n");
 		return TOU_BREAK;
 	}
 
@@ -3084,10 +3103,11 @@ int tou_ini_parse_line(tou_llist_t** inicontents, char* line)
 	tou_trim_back(&key);
 	tou_trim_back(&val);
 
-	TOU_PRINTD("  Key: %s, Val: %s\n", key, val);
-	tou_llist_append((tou_llist_t**)( &((*inicontents)->dat2) ),    // append to "current section" element
-		tou_strdup(key), tou_strdup(val),                           // copy key, copy val
-		1, 1);                                                      // auto dealloc both key&val
+	TOU_PRINTD("[ini_parse_line] setting property key=%s, val=%s\n", key, val);
+	// tou_llist_append((tou_llist_t**)( &((*inicontents)->dat2) ),    // append to "current section" element
+	// 	tou_strdup(key), tou_strdup(val),                           // copy key, copy val
+	// 	1, 1);                                                      // auto dealloc both key&val
+	tou_ini_set(inicontents, (*inicontents)->dat1, key, val);
 
 	return TOU_CONTINUE;
 }
@@ -3211,25 +3231,36 @@ void* tou_ini_get(tou_llist_t* inicontents, const char* section_name, const char
 
 
 /*  */
-void* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value)
+tou_llist_t* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const char* key, char* new_value)
 {
-	if (inicontents == NULL || *inicontents == NULL || section_name == NULL || key == NULL || new_value == NULL) {
+	if (inicontents == NULL /*|| *inicontents == NULL*/ || section_name == NULL /*|| key == NULL || new_value == NULL*/) {
 		TOU_PRINTD("[ini_set] received empty params\n");
 		return NULL;
 	}
 
+	// Retrieve or create a new section
 	tou_llist_t* sect = tou_llist_find_key(*inicontents, (void*)section_name);
 	if (sect == NULL) {
-		TOU_PRINTD("[ini_set] section not found, allocating new...\n");
-		// TODO: tou_ini_new_section ?
+		TOU_PRINTD("[ini_set] section [%s] not found, allocating new...\n", section_name);
 		sect = tou_llist_append(inicontents, tou_strdup(section_name), NULL, 1, 0);
 	}
+
+	// If key in unspecified ignore value and return a pointer to the new (or alredy existing) section
+	if (key == NULL || tou_strlen(key) == 0) {
+		TOU_PRINTD("[ini_set] key is empty, returning\n", section_name);
+		return sect;
+	}
 	
+	// Both section name and key are present, now we can (re)alloc space for the value
 	tou_llist_t* prop = tou_llist_find_key(sect->dat2, (void*)key);
+
+	// Fix up value if needed (NULL into empty "")
+	if (new_value == NULL)
+		new_value = ""; // will get dup()'d
 
 	if (prop == NULL) {
 		// Allocate new property...
-		TOU_PRINTD("[ini_set] property not found\n");
+		TOU_PRINTD("[ini_set] property not found, creating new...\n");
 
 		prop = tou_llist_append(
 			(tou_llist_t**)(&sect->dat2),
@@ -3237,11 +3268,11 @@ void* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const cha
 			1, 1);
 
 		TOU_PRINTD("[ini_set] %s, %s\n", prop->dat1, prop->dat2);
-		return prop->dat2;
+		return prop;
 
 	} else {
 		// ...or set/realloc the existing one
-		TOU_PRINTD("[ini_set] property found\n");
+		TOU_PRINTD("[ini_set] property found, setting...\n");
 
 		char* old_value = prop->dat2;
 		size_t old_len = strlen(old_value);
@@ -3253,7 +3284,7 @@ void* tou_ini_set(tou_llist_t** inicontents, const char* section_name, const cha
 		tou_strlcpy(old_value, new_value, new_len + 1);
 		prop->dat2 = old_value;
 
-		return prop->dat2;
+		return prop;
 	}
 }
 
@@ -3359,7 +3390,7 @@ int tou_ini_save_fp_xml(tou_llist_t* inicontents, FILE* fp)
 	// Print initial json struct and metadata
 	const char* root_tag = "root";
 	fprintf(fp, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-	fprintf(fp, "<%s ver="TOU_MSTR(TOU_XML_DATA_VER)" len=\"%zu\">", root_tag, tou_llist_len(inicontents));
+	fprintf(fp, "<%s ver=" TOU_MSTR(TOU_XML_DATA_VER) " len=\"%zu\">", root_tag, tou_llist_len(inicontents));
 	if (ferror(fp)) {
 		TOU_PRINTD("[ini_save_fp_xml] Error writing to stream\n");
 		return -2;
@@ -3373,7 +3404,7 @@ int tou_ini_save_fp_xml(tou_llist_t* inicontents, FILE* fp)
 		tou_llist_t* prop = section->dat2;
 
 		// Print section name and attr(s)
-		char* sect_name_tag = tou_replace_ch(strdup(section->dat1), ' ', '-');
+		char* sect_name_tag = tou_replace_ch(tou_strdup(section->dat1), ' ', '-');
 		fprintf(fp, "\n\t<%s len=\"%zu\">", sect_name_tag, tou_llist_len(prop));
 		
 		while (prop) {

@@ -21,7 +21,7 @@ v1.4 (20240814)
 ===
 - fixed strndup length bug
 - forgot to trim_back key while parsing .ini
-- string-separated parameter parser (`paramparse[_n]`)
+- string-separated parameter parser (`paramparse`, `paramparse_n`)
 - from now on renamed all string functions from `tou_str#` to `tou_s#`, except functions which correspond to standard library ones
 - tou.h version string (`TOU_GET_VERSION`)
 - more helper macros (`SILENCE`, `ARR_SIZE`)

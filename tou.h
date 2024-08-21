@@ -71,10 +71,17 @@
 #endif
 
 /**
-	@brief Debug print, used like printf()
+	@brief Debug print, printf()-like but used for logging internals
 */
 #ifndef TOU_PRINTD
 #define TOU_PRINTD(format, ...) if (TOU_DBG) { fprintf(stdout, TOU_DEBUG_PREFIX format, ##__VA_ARGS__); } else (void)0
+#endif
+
+/**
+	@brief User logging macro, similar to ESP_LOGI on ESP32 or dlog_print on Tizen
+*/
+#ifndef TOU_LOG
+#define TOU_LOG(TAG, format, ...) fprintf(stdout, "[%s] " format "\n", TAG, ## __VA_ARGS__);
 #endif
 
 /** @} */
@@ -523,7 +530,7 @@ void tou_sfind_iter_multiple_n(const char* src, const char* kwds[], int n_kwds, 
 tou_llist_t* tou_split(char* str, const char* delim);
 
 /**
-	@brief (Re)allocates enough memory for src and appends it to dst
+	@brief (Re)allocates enough memory for src and appends it to dst.
 
 	Does not know the size of the original destination and will not
 	consider it!
@@ -535,7 +542,20 @@ tou_llist_t* tou_split(char* str, const char* delim);
 char* tou_sappend(char* dst, char* src);
 
 /**
-	@brief (Re)allocates enough memory for src and prepends it to dst
+	@brief (Re)allocates enough memory for additional character
+	src and appends it to dst.
+
+	Does not know the size of the original destination and will not
+	consider it!
+
+	@param[in] dst String which will be expanded and copied into
+	@param[in] src Character to copy
+	@return Realloc'd pointer with combined strings
+*/
+char* tou_sappendch(char* dst, char src);
+
+/**
+	@brief (Re)allocates enough memory for src and prepends it to dst.
 
 	Does not know the size of the original destination and will not
 	consider it!
@@ -545,6 +565,19 @@ char* tou_sappend(char* dst, char* src);
 	@return Realloc'd pointer with combined strings
 */
 char* tou_sprepend(char* dst, char* src);
+
+/**
+	@brief (Re)allocates enough memory for additional character
+	src and prepends it to dst.
+
+	Does not know the size of the original destination and will not
+	consider it!
+
+	@param[in] dst String which will be expanded and copied into
+	@param[in] src String to copy
+	@return Realloc'd pointer with combined strings
+*/
+char* tou_sprependch(char* dst, char src);
 
 /**
  * @brief Helper for `tou_sreplace` that takes the whole string into consideration.
@@ -723,7 +756,7 @@ void tou_enable_stdout(int saved_fd);
 	Filedescriptor handle local to this compilation unit used with ::TOU_SILENCE.
 	Since it isn't surrounded by `#ifdef TOU_IMPLEMENTATION` it'll be declared each time you \#include the header.
 */
-int _tou_g_saved_stdout;
+static int _tou_g_saved_stdout;
 
 
 /** @} */
@@ -2039,6 +2072,21 @@ char* tou_sappend(char* dst, char* src)
 
 
 /*  */
+char* tou_sappendch(char* dst, char src)
+{
+	size_t dst_len = tou_strlen(dst);
+
+	size_t new_size = dst_len + 1 + 1;
+	dst = realloc(dst, new_size);
+
+	*(dst + dst_len) = src;
+	*(dst + dst_len + 1) = '\0';
+
+	return dst;
+}
+
+
+/*  */
 char* tou_sprepend(char* dst, char* src)
 {
 	size_t dst_len = tou_strlen(dst);
@@ -2048,6 +2096,20 @@ char* tou_sprepend(char* dst, char* src)
 
 	memcpy(new_mem,           src, src_len);
 	memcpy(new_mem + src_len, dst, dst_len + 1); // copy \0 too
+
+	return new_mem;
+}
+
+
+/*  */
+char* tou_sprependch(char* dst, char src)
+{
+	size_t dst_len = tou_strlen(dst);
+
+	char* new_mem = malloc(dst_len + 1 + 1);
+
+	*new_mem = src;
+	memcpy(new_mem + 1, dst, dst_len + 1); // don't forget to copy \0 too
 
 	return new_mem;
 }

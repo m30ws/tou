@@ -1,24 +1,19 @@
 # Changelog
 
-v1.0
-===
+## v1.0
 - File operations
 
-v1.1
-===
+## v1.1
 - String operations and helpers
 
-v1.2
-===
+## v1.2
 - Linked list & INI file operations
 
-v1.3 (20240807)
-===
+## v1.3 (20240807)
 - INI api improvements
 - `strlower`, `strupper`, `s(tring)append`, `s(tring)prepend`
 
-v1.4 (20240814)
-===
+## v1.4 (20240814)
 - fixed strndup length bug
 - forgot to trim_back key while parsing .ini
 - string-separated parameter parser (`paramparse`, `paramparse_n`)
@@ -31,8 +26,7 @@ v1.4 (20240814)
 - searching for more than one string at once (`sfind_multiple`, `sfind_multiple_n`)
 - helper iterate function for multiple search (`sfind_iter_multiple`, `sfind_iter_multiple_n`)
 
-v1.5 (20240819)
-===
+## v1.5 (20240819)
 - `llist_append` bugs fixed & simplified
 - prepend functions added (`llist_prepend`, `llist_prependone`)
 - [!] Simplified the llist api to only take ** where really needed (append, prepend)
@@ -59,8 +53,8 @@ v1.5 (20240819)
 
 - updated and improved example file
 
-v1.5.1 (20240820)
-===
+## v1.5.1 (20240820)
 - surrounded lib with `extern "C"`
 - `ini_set` can now be also be used to create empty sections
   - now returns a pointer to the property (key & value) object (or the section object) instead of just value which was just stored
+- added `sappendch`, `sprependch` for (ap|pre)pending single characters instead of just whole char*
